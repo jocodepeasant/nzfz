@@ -1,0 +1,30 @@
+# Node / Electron
+node_modules/
+**/node_modules/
+dist/
+out/
+release/
+*.log
+npm-debug.log*
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
