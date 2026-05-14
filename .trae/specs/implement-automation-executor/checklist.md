@@ -1,0 +1,33 @@
+- [ ] GameState 包含 wave/resource/core_hp/in_map_ui/current_region_id/executed_waves 字段，支持状态更新与变化检测
+- [ ] GameState 波次变化时触发回调通知
+- [ ] InputAdapter 抽象基类定义 click/key_press/key_hold/drag/scroll 接口
+- [ ] PynputAdapter 实现底层输入模拟，考虑反作弊兼容
+- [ ] PyautoguiAdapter 备选实现可用
+- [ ] ScreenCapture 抽象基类定义 capture_full/capture_roi 接口
+- [ ] MssCapture 默认实现可用
+- [ ] WindowManager 可通过窗口标题定位游戏窗口并获取 rect
+- [ ] OCREngine 可识别波次数字和资源数值，支持多帧投票
+- [ ] VisionDetector 可检测地图界面指示器和格子状态
+- [ ] ConditionEngine 支持 resource_gte/slot_empty/slot_occupied/wave_gte/trap_level_lt 五种条件
+- [ ] ConditionEngine 条件不满足时按 on_condition_failed 策略处理（wait/skip）
+- [ ] Navigator 可执行 pan_map 拖拽进入指定区域
+- [ ] Navigator 可回原点（关闭地图再重新打开）
+- [ ] Navigator 可检测并打开地图界面
+- [ ] SlotLocator 可将比例坐标转换为像素坐标
+- [ ] SlotLocator 支持 micro_adjust 微调模式（cross_5_points 等）
+- [ ] ActionExecutor 支持 place_trap/upgrade_trap/remove_trap/log 四种动作
+- [ ] ActionExecutor 每个动作执行前检查 conditions
+- [ ] RetryManager 支持重试策略（max_count/interval_ms/reset_view_before_retry/micro_adjust_on_retry）
+- [ ] RetryManager 重试耗尽后按 on_fail.policy 处理
+- [ ] ExecutorContext 持有所有子模块引用，提供 from_script 工厂方法
+- [ ] 主循环实现事件驱动+轮询混合模式
+- [ ] 主循环等待波次时使用长间隔轮询（2s），检测到变化时立即执行
+- [ ] 主循环支持超时保护（runtime.max_run_minutes）
+- [ ] 主循环支持 dry-run 模拟执行模式
+- [ ] ReportManager 记录每个动作执行结果
+- [ ] ReportManager 生成单局 JSON 报告
+- [ ] BatchRunner 支持连续跑多局
+- [ ] CLI run 命令接入完整执行流程
+- [ ] CLI 支持 --dry-run / --count / --report-dir 参数
+- [ ] pyproject.toml 依赖正确声明
+- [ ] 所有模块有对应单元测试
