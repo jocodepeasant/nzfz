@@ -20,8 +20,9 @@
 - [ ] RetryManager 支持重试策略（max_count/interval_ms/reset_view_before_retry/micro_adjust_on_retry）
 - [ ] RetryManager 重试耗尽后按 on_fail.policy 处理
 - [ ] ExecutorContext 持有所有子模块引用，提供 from_script 工厂方法
-- [ ] 主循环实现事件驱动+轮询混合模式
-- [ ] 主循环等待波次时使用长间隔轮询（2s），检测到变化时立即执行
+- [ ] 主循环实现固定间隔轮询+定向ROI扫描模式
+- [ ] 主循环以固定间隔（默认1s）扫描 wave ROI 区域检测波次变化
+- [ ] 主循环动作执行中仅做定向ROI扫描（资源/格子状态），不做全屏识别
 - [ ] 主循环支持超时保护（runtime.max_run_minutes）
 - [ ] 主循环支持 dry-run 模拟执行模式
 - [ ] ReportManager 记录每个动作执行结果

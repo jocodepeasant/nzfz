@@ -77,13 +77,14 @@
   - [ ] SubTask 12.3: 编写 ExecutorContext 单元测试
 
 - [ ] Task 13: 实现主执行循环
-  - [ ] SubTask 13.1: 实现 run_loop 主循环（事件驱动+轮询混合）
-  - [ ] SubTask 13.2: 实现等待波次切换逻辑（长间隔轮询）
+  - [ ] SubTask 13.1: 实现 run_loop 主循环（固定间隔轮询+定向ROI扫描）
+  - [ ] SubTask 13.2: 实现波次轮询逻辑（固定间隔1s扫描 wave ROI 区域）
   - [ ] SubTask 13.3: 实现波次动作序列执行
-  - [ ] SubTask 13.4: 实现结算检测（胜利/失败/异常）
-  - [ ] SubTask 13.5: 实现超时保护
-  - [ ] SubTask 13.6: 实现 dry-run 模拟执行模式
-  - [ ] SubTask 13.7: 编写主循环集成测试
+  - [ ] SubTask 13.4: 实现动作执行中定向ROI扫描（资源/格子状态等）
+  - [ ] SubTask 13.5: 实现结算检测（胜利/失败/异常）
+  - [ ] SubTask 13.6: 实现超时保护
+  - [ ] SubTask 13.7: 实现 dry-run 模拟执行模式
+  - [ ] SubTask 13.8: 编写主循环集成测试
 
 - [ ] Task 14: 实现 ReportManager 报告管理器
   - [ ] SubTask 14.1: 实现动作结果记录（类型/名称/结果/重试次数/耗时）
