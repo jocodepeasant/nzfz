@@ -8,6 +8,7 @@ from rich.table import Table
 
 from td_executor.script.load import load_script_file
 from td_executor.script.validate import validate_script_data
+from td_executor.runtime.window import find_game_window
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
@@ -33,6 +34,7 @@ def validate_cmd(path: Path) -> None:
 def run_cmd(
     path: Path,
     dry_run: bool = typer.Option(False, "--dry-run", help="只加载与校验，不操作游戏"),
+    title_keyword: str = typer.Option("逆战", "--title", help="游戏窗口标题关键字"),
 ) -> None:
     """Load script (and optionally run automation when implemented)."""
     data = load_script_file(path)
@@ -44,8 +46,12 @@ def run_cmd(
     if dry_run:
         console.print("[green]dry-run:[/green] 已加载并校验，未执行游戏操作。", path.resolve())
         return
-    console.print("[yellow]run[/yellow] 尚未实现游戏内执行，请使用 --dry-run。")
-    raise typer.Exit(code=2)
+    rect = find_game_window(title_keyword)
+    if rect is None:
+        console.print(f"[red]错误:[/red] 未找到标题包含 '{title_keyword}' 的游戏窗口，请确认游戏已启动。")
+        raise typer.Exit(code=1)
+    console.print(f"[green]已定位游戏窗口[/green] {rect}")
+    console.print("[yellow]run[/yellow] 游戏内执行尚未完全实现。")
 
 
 def main() -> None:
