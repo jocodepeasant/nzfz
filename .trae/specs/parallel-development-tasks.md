@@ -12,10 +12,11 @@
 ✅ T02-单局日志 (已完成)
 ✅ T03-重试框架 (已完成)
 ✅ T04-OCR识别 (已完成)
+✅ T05-模板匹配 (已完成)
 
 波次1 (可并行2人):  ~~T02-单局日志~~  |  ~~T03-重试框架~~
                                     ↓
-波次2 (可并行2人):  ~~T04-OCR识别~~  |  T05-模板匹配
+波次2 (可并行2人):  ~~T04-OCR识别~~  |  ~~T05-模板匹配~~
                                     ↓
 波次3 (可并行2人):  T06-条件引擎  |  T07-按键动作基础
                                     ↓
@@ -41,6 +42,7 @@
   - `td_executor.script.load` → `load_script_file()`
   - `td_executor.script.validate` → `validate_script_data()`
   - `td_executor.engine.retry` → `RetryManager`, `RetryConfig`, `OnConditionFailedConfig`, `OnFailConfig`, `ActionResult`, `ActionAbortedError`
+  - `td_executor.vision.detector` → `VisionDetector`, `DetectorConfig`, `crop_roi`
 
 ---
 
@@ -321,64 +323,42 @@ def read_core_hp(capture: ScreenCapture, rect: WindowRect, rois: dict, multi_fra
 
 ---
 
-### T05 - 模板匹配
+### ✅ T05 - 模板匹配（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P4，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/vision/detector.py` |
-| **依赖** | T01 ✅（`ScreenCapture` 截图） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-vision-detector/` |
 
-#### 需求描述
-
-实现基于 OpenCV 模板匹配的图像识别功能，用于判断地图界面状态、格子占用状态、错误提示等。
-
-#### 接口定义
+#### 已实现接口
 
 ```python
-"""OpenCV 模板匹配等。"""
+@dataclass
+class DetectorConfig:
+    match_threshold: float = 0.8
+    multi_frame_count: int = 3
+    multi_frame_interval_ms: int = 100
+    templates_dir: str = "assets/templates"
 
-from __future__ import annotations
+def crop_roi(frame: np.ndarray, roi: dict) -> np.ndarray: ...
 
-import numpy as np
-from td_executor.runtime.window import WindowRect
-from td_executor.runtime.capture import ScreenCapture
-
-
-def match_template(
-    capture: ScreenCapture,
-    rect: WindowRect,
-    roi: dict,
-    template_path: str,
-    threshold: float = 0.8,
-) -> bool:
-    """在指定 ROI 区域内进行模板匹配。"""
-
-
-def is_map_ui_open(capture: ScreenCapture, rect: WindowRect, rois: dict) -> bool:
-    """判断是否在地图界面（检测 map_ui_indicator）。"""
-
-
-def is_slot_empty(capture: ScreenCapture, rect: WindowRect, slot_verify: dict) -> bool:
-    """判断格子是否为空。"""
-
-
-def is_slot_occupied(capture: ScreenCapture, rect: WindowRect, slot_verify: dict) -> bool:
-    """判断格子是否已放置陷阱。"""
-
-
-def detect_error_tip(capture: ScreenCapture, rect: WindowRect, rois: dict) -> bool:
-    """检测是否出现放置错误提示。"""
+class VisionDetector:
+    def __init__(self, config: DetectorConfig | None = None) -> None: ...
+    def match_template(self, capture, rect, roi, template_path, threshold=None) -> bool: ...
+    def is_map_ui_open(self, capture, rect, rois) -> bool: ...
+    def is_slot_empty(self, capture, rect, slot_verify) -> bool: ...
+    def is_slot_occupied(self, capture, rect, slot_verify) -> bool: ...
+    def detect_error_tip(self, capture, rect, rois) -> bool: ...
 ```
 
 #### 验收标准
 
-- [ ] `match_template` 正确执行模板匹配，返回 bool
-- [ ] `is_map_ui_open` 可判断地图界面状态
-- [ ] `is_slot_empty` / `is_slot_occupied` 可判断格子占用状态
-- [ ] 模板图片路径不存在时打印 warning 并返回 `False`，不崩溃
-- [ ] OpenCV 不可用时优雅降级
+- [x] `match_template` 正确执行模板匹配，返回 bool
+- [x] `is_map_ui_open` 可判断地图界面状态
+- [x] `is_slot_empty` / `is_slot_occupied` 可判断格子占用状态
+- [x] 模板图片路径不存在时打印 warning 并返回 `False`，不崩溃
+- [x] OpenCV 不可用时优雅降级
 
 ---
 
@@ -664,7 +644,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | T02  | | | | | | | | | ✅ | | | |
 | T03  | | | | | | | | ✅ | | | | |
 | T04  | | ✅ | | | | | | | | | | |
-| T05  | | | ✏️ | | | | | | | | | |
+| T05  | | | ✅ | | | | | | | | | |
 | T06  | | | | | ✏️ | | | | | | | |
 | T07  | | | | ✏️ | | | | | | | | |
 | T08  | | | | | | ✏️ | | | | | | |
@@ -686,7 +666,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | P2 | 游戏窗口识别 | `runtime/window.py` | ✅ 已实现 |
 | — | 屏幕采集 | `runtime/capture.py` | ✅ 已实现 (T01) |
 | P3 | OCR 识别波次、资源 | `vision/ocr.py` | ✅ 已实现 (T04) |
-| P4 | 地图界面判断 | `vision/detector.py` | ❌ T05 |
+| P4 | 地图界面判断 | `vision/detector.py` | ✅ 已实现 (T05) |
 | P5 | 按 O 打开地图 | `engine/action.py` | ❌ T07 |
 | P6 | 回 origin | `engine/navigator.py` | ❌ T08 |
 | P7 | pan_to_region | `engine/navigator.py` | ❌ T08 |
