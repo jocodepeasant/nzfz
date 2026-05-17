@@ -9,11 +9,13 @@
 
 ```
 ✅ T01-屏幕采集 (已完成)
+✅ T02-单局日志 (已完成)
 ✅ T03-重试框架 (已完成)
+✅ T04-OCR识别 (已完成)
 
-波次1 (可并行2人):  T02-单局日志  |  T03-重试框架 ✅
+波次1 (可并行2人):  ~~T02-单局日志~~  |  ~~T03-重试框架~~
                                     ↓
-波次2 (可并行2人):  T04-OCR识别   |  T05-模板匹配
+波次2 (可并行2人):  ~~T04-OCR识别~~  |  T05-模板匹配
                                     ↓
 波次3 (可并行2人):  T06-条件引擎  |  T07-按键动作基础
                                     ↓
@@ -181,14 +183,13 @@ result = rm.execute_with_retry(
 
 ---
 
-### T02 - 单局日志
+### ✅ T02 - 单局日志（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P12，中 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/engine/report.py` |
-| **依赖** | 无（纯数据记录模块） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-run-report/` |
 
 #### 需求描述
 
@@ -249,10 +250,10 @@ def write_report(path: Path, report: RunReport) -> None:
 
 #### 验收标准
 
-- [ ] `ActionLog` 和 `RunReport` 数据类可正常实例化和序列化
-- [ ] `write_report` 生成合法 JSON 文件，datetime 为 ISO 8601 字符串
-- [ ] `RunReport.summary()` 返回包含 total/success/fail/duration 的字典
-- [ ] 不依赖任何未实现模块
+- [x] `ActionLog` 和 `RunReport` 数据类可正常实例化和序列化
+- [x] `write_report` 生成合法 JSON 文件，datetime 为 ISO 8601 字符串
+- [x] `RunReport.summary()` 返回包含 total/success/fail/duration 的字典
+- [x] 不依赖任何未实现模块
 
 ---
 
@@ -260,14 +261,13 @@ def write_report(path: Path, report: RunReport) -> None:
 
 ---
 
-### T04 - OCR 识别
+### ✅ T04 - OCR 识别（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P3，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/vision/ocr.py` |
-| **依赖** | T01 ✅（`ScreenCapture` 截图） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-ocr-recognition/` |
 
 #### 需求描述
 
@@ -313,11 +313,11 @@ def read_core_hp(capture: ScreenCapture, rect: WindowRect, rois: dict, multi_fra
 
 #### 验收标准
 
-- [ ] `read_digits_roi` 返回纯数字字符串或空字符串
-- [ ] `read_wave` / `read_resource` / `read_core_hp` 返回 int 或 None
-- [ ] 多帧投票逻辑正确，至少采集 `multi_frame` 配置的帧数
-- [ ] PaddleOCR 不可用时优雅降级，不崩溃
-- [ ] ROI 截图区域与配置的比例坐标一致
+- [x] `read_digits_roi` 返回纯数字字符串或空字符串
+- [x] `read_wave` / `read_resource` / `read_core_hp` 返回 int 或 None
+- [x] 多帧投票逻辑正确，至少采集 `multi_frame` 配置的帧数
+- [x] PaddleOCR 不可用时优雅降级，不崩溃
+- [x] ROI 截图区域与配置的比例坐标一致
 
 ---
 
@@ -661,9 +661,9 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | 任务 | capture.py | ocr.py | detector.py | action.py | condition.py | navigator.py | slot.py | retry.py | report.py | batch.py | cli.py | state.py |
 |------|:---------:|:------:|:-----------:|:---------:|:------------:|:------------:|:-------:|:--------:|:---------:|:--------:|:------:|:--------:|
 | T01  | ✅ | | | | | | | | | | | |
-| T02  | | | | | | | | | ✏️ | | | |
+| T02  | | | | | | | | | ✅ | | | |
 | T03  | | | | | | | | ✅ | | | | |
-| T04  | | ✏️ | | | | | | | | | | |
+| T04  | | ✅ | | | | | | | | | | |
 | T05  | | | ✏️ | | | | | | | | | |
 | T06  | | | | | ✏️ | | | | | | | |
 | T07  | | | | ✏️ | | | | | | | | |
@@ -685,7 +685,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | P1 | JSON 加载与校验 | `script/load.py` + `script/validate.py` | ✅ 已实现 |
 | P2 | 游戏窗口识别 | `runtime/window.py` | ✅ 已实现 |
 | — | 屏幕采集 | `runtime/capture.py` | ✅ 已实现 (T01) |
-| P3 | OCR 识别波次、资源 | `vision/ocr.py` | ❌ T04 |
+| P3 | OCR 识别波次、资源 | `vision/ocr.py` | ✅ 已实现 (T04) |
 | P4 | 地图界面判断 | `vision/detector.py` | ❌ T05 |
 | P5 | 按 O 打开地图 | `engine/action.py` | ❌ T07 |
 | P6 | 回 origin | `engine/navigator.py` | ❌ T08 |
@@ -694,5 +694,5 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | P9 | upgrade_trap | `engine/action.py` | ❌ T10 |
 | P10 | 条件引擎 | `engine/condition.py` | ❌ T06 |
 | P11 | retry 机制 | `engine/retry.py` | ✅ 已实现 (T03)，T11 集成待完成 |
-| P12 | 单局日志 | `engine/report.py` | ❌ T02+T12 |
+| P12 | 单局日志 | `engine/report.py` | ✅ 已实现 (T02) |
 | P13 | 批量跑固定脚本 | `engine/batch.py` | ❌ T13 |
