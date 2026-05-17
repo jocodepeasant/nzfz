@@ -18,17 +18,17 @@ Electron + Vite + React + TypeScript。开发时从本目录运行 `npm run dev`
 - **高级 JSON**：Inspector「高级 JSON」为 CodeMirror 编辑器，**Ctrl+F**（macOS **Cmd+F**）查找与高亮。
 - **底图 1:1**：`scale=1` 时按图片原始像素显示，超出画布区域滚动查看（滚轮缩放仍为仅会话查看）。
 - **槽位**：须点地图工具 **「放置槽位」** 后再点击地图；工程默认显示半径 **0.5**、识别半边长 **1**、点击容差 **1**（px，可在 Inspector「楼层」区修改）。
-- **工程陷阱库**：顶栏 **「陷阱库」** 展开全宽抽屉；陷阱存入 `project.json` 的 `traps[]`，全工程/全楼层共享；每陷阱可导入识别图至 `assets/verify_templates/trap_{id}.*`，导出时写入 `recognition_template`。
+- **应用陷阱库**：顶栏 **「陷阱库」** 进入**全页**陷阱管理（地图/Inspector 隐藏）；数据位于 `map-configurator/traps/` 与 `assets/verify_templates/`，**应用启动即加载**，与工程无关；增删改自动落盘；表单无选择键/升级键（导出时补默认值）。
 - **底图标定**：地图工具 **「标定有效区域」** 拖拽绿框 → 写入 `map.calibration.content_rect`；槽位坐标相对该框。
-- **仅查看的缩放**：滚轮以**鼠标位置**为中心缩放；**方向键**平移视野（Shift 加速）；选中槽位时方向键微调位置（Shift+方向键仍平移视野）；空格/中键拖拽平移；工具栏 ↑↓←→ 与「删除选中」；**Delete** 删除地图上选中的槽位/ROI，Inspector 选中区域/陷阱时 **Delete** 删除。
+- **仅查看的缩放**：滚轮以**鼠标位置**为中心缩放；**方向键**平移视野（Shift 加速）；选中槽位时方向键微调位置（Shift+方向键仍平移视野）；**右键/中键/空格+左键**拖拽平移；工具栏 ↑↓←→ 与「删除选中」；**Delete** 删除地图上选中的槽位/ROI，Inspector 选中区域/陷阱时 **Delete** 删除。
 - **视图状态**：上述平移/缩放为会话状态（`sessionStorage`），**不写入** `export/script.json`。
 - **区域说明**：Inspector 内说明 region 语义；选中区域可表单编辑 `enter_actions`（pan_map 序列）。
 
-1. **工程**：顶栏选择目录；`project.json` / `assets` / `export`；Inspector「楼层」区保存工程元数据。
-2. **元数据 / 区域 / 槽位 / ROI / 波次**：右侧 Inspector；**陷阱**在顶栏「陷阱库」编辑。
-3. **导出**：校验后写入 `export/script.json`（含多楼层字段与工程陷阱库）；支持另存为与打开外部 JSON。
+1. **工程**：顶栏选择目录；`project.json` / `assets` / `export`；Inspector「楼层」区保存工程元数据（不含陷阱库）。
+2. **元数据 / 区域 / 槽位 / ROI / 波次**：右侧 Inspector；**陷阱**在顶栏「陷阱库」编辑（无需先选工程）。
+3. **导出**：校验后写入 `export/script.json`（含多楼层字段与应用陷阱库）；支持另存为与打开外部 JSON。
 
-使用步骤：`npm run dev` → 顶栏 **选择工程目录** → 顶栏 **陷阱库** 配置陷阱与识别图 → Inspector **导入底图** → 地图工具栏：**标定有效区域** → **放置槽位** → **框选 ROI** → 填区域/波次 → **导出**。
+使用步骤：`npm run dev` → 顶栏 **陷阱库**（全页）配置陷阱与识别图 → **选择工程目录** → **返回地图** → Inspector **导入底图** → 地图工具栏编辑 → **导出**。
 
 旧版 9 Tab 界面已移除；单楼层工程会在打开时自动迁移为 `floors: [{ floor_id: "1", ... }]`。
 

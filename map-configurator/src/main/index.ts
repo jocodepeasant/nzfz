@@ -10,13 +10,20 @@ import {
   fileExists,
   guessMimeFromRelativePath,
   importFloorImage,
-  importTrapRecognitionImage,
   readExportScript,
   readFileBase64,
   readProjectJson,
   writeExportScript,
   writeProjectJson
 } from './project-fs'
+import {
+  configuratorFileExists,
+  guessMimeFromRelativePath as trapGuessMime,
+  importTrapRecognitionImage,
+  listTrapDefinitions,
+  readConfiguratorFileBase64,
+  syncTrapDefinitions
+} from './trap-fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -161,13 +168,6 @@ ipcMain.handle('project-import-floor-image', async (event, projectRoot: string, 
 })
 
 ipcMain.handle(
-  'project-import-trap-recognition-image',
-  async (event, projectRoot: string, trapId: string) => {
-    return importTrapRecognitionImage(projectRoot, trapId, dialogParent(event))
-  }
-)
-
-ipcMain.handle(
   'project-read-file-base64',
   async (_evt, projectRoot: string, relativePath: string) => {
     const b64 = await readFileBase64(projectRoot, relativePath)
@@ -178,5 +178,30 @@ ipcMain.handle(
 
 ipcMain.handle('project-file-exists', async (_evt, projectRoot: string, relativePath: string) => {
   const exists = await fileExists(projectRoot, relativePath)
+  return { exists }
+})
+
+ipcMain.handle('trap-list-definitions', async () => {
+  const traps = await listTrapDefinitions()
+  return { traps }
+})
+
+ipcMain.handle('trap-sync-definitions', async (_evt, traps: unknown[], previousTrapIds: string[]) => {
+  await syncTrapDefinitions(traps, previousTrapIds)
+  return { ok: true as const }
+})
+
+ipcMain.handle('trap-import-recognition-image', async (event, trapId: string) => {
+  return importTrapRecognitionImage(trapId, dialogParent(event))
+})
+
+ipcMain.handle('trap-read-file-base64', async (_evt, relativePath: string) => {
+  const b64 = await readConfiguratorFileBase64(relativePath)
+  const mime = trapGuessMime(relativePath)
+  return { base64: b64, mime }
+})
+
+ipcMain.handle('trap-file-exists', async (_evt, relativePath: string) => {
+  const exists = await configuratorFileExists(relativePath)
   return { exists }
 })

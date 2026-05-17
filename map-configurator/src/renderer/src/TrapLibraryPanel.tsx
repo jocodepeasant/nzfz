@@ -1,100 +1,111 @@
 import { useEffect, useState } from 'react'
-import type { EditorSelection, TrapDefinition } from './script/types'
+import type { EditorSelection, TrapLibraryEntry } from './script/types'
 import { createDefaultTrapDefinition } from './script/trapUtils'
 
 type TrapLibraryPanelProps = {
-  open: boolean
-  projectRoot: string | null
-  traps: TrapDefinition[]
+  traps: TrapLibraryEntry[]
   selection: EditorSelection
-  onTrapsChange: (traps: TrapDefinition[]) => void
+  onTrapsChange: (traps: TrapLibraryEntry[]) => void
   onSelect: (sel: EditorSelection) => void
-  onPersist?: () => void
 }
 
+type ThumbState = 'idle' | 'loading' | 'ready' | 'error'
+
 function TrapThumb({
-  projectRoot,
-  relativePath
+  relativePath,
+  refreshKey
 }: {
-  projectRoot: string | null
   relativePath?: string
+  refreshKey?: number
 }): JSX.Element {
   const [url, setUrl] = useState<string | null>(null)
+  const [state, setState] = useState<ThumbState>('idle')
 
   useEffect(() => {
     let cancelled = false
-    if (!projectRoot || !relativePath) {
+    if (!relativePath) {
       setUrl(null)
+      setState('idle')
       return
     }
+    const normalized = relativePath.trim().replace(/\\/g, '/')
+    setState('loading')
+    setUrl(null)
     void (async () => {
-      const ex = await window.projectApi.fileExists(projectRoot, relativePath)
-      if (!ex.exists) {
-        if (!cancelled) setUrl(null)
-        return
+      try {
+        const r = await window.trapApi.readFileBase64(normalized)
+        if (!cancelled) {
+          setUrl(`data:${r.mime};base64,${r.base64}`)
+          setState('ready')
+        }
+      } catch {
+        if (!cancelled) {
+          setUrl(null)
+          setState('error')
+        }
       }
-      const r = await window.projectApi.readFileBase64(projectRoot, relativePath)
-      if (!cancelled) setUrl(`data:${r.mime};base64,${r.base64}`)
     })()
     return () => {
       cancelled = true
     }
-  }, [projectRoot, relativePath])
+  }, [relativePath, refreshKey])
 
+  if (state === 'error') {
+    return <span className="trap-thumb trap-thumb-empty">加载失败</span>
+  }
   if (!url) {
-    return <span className="trap-thumb trap-thumb-empty">无图</span>
+    return <span className="trap-thumb trap-thumb-empty">{state === 'loading' ? '…' : '无图'}</span>
   }
   return <img className="trap-thumb" src={url} alt="" />
 }
 
 export function TrapLibraryPanel({
-  open,
-  projectRoot,
   traps,
   selection,
   onTrapsChange,
-  onSelect,
-  onPersist
-}: TrapLibraryPanelProps): JSX.Element | null {
-  if (!open) return null
+  onSelect
+}: TrapLibraryPanelProps): JSX.Element {
+  const [thumbRevisions, setThumbRevisions] = useState<Record<string, number>>({})
 
-  const updateTrap = (index: number, patch: Partial<TrapDefinition>) => {
+  const updateTrap = (index: number, patch: Partial<TrapLibraryEntry>) => {
     onTrapsChange(traps.map((t, i) => (i === index ? { ...t, ...patch } : t)))
   }
 
   const handleImportImage = async (index: number, trapId: string) => {
-    if (!projectRoot) return
-    const r = await window.projectApi.importTrapRecognitionImage(projectRoot, trapId)
+    const r = await window.trapApi.importTrapRecognitionImage(trapId)
     if (r.cancelled) return
     updateTrap(index, { recognitionImageRelative: r.relativePath })
-    onPersist?.()
+    setThumbRevisions((prev) => ({ ...prev, [trapId]: Date.now() }))
+  }
+
+  const handleAddTrap = () => {
+    onTrapsChange([...traps, createDefaultTrapDefinition(traps.length)])
   }
 
   return (
-    <section className="trap-library-drawer">
+    <section className="trap-library-page">
       <div className="trap-library-header">
-        <h2>工程陷阱库</h2>
+        <h2>应用陷阱库</h2>
         <p className="hint">
-          陷阱为工程级共享，所有楼层与导出脚本共用；请为每个陷阱配置识别图（模板匹配用）。
+          陷阱库位于 <code>map-configurator/traps/</code>，识别图在{' '}
+          <code>map-configurator/assets/verify_templates/</code>。应用级共享，与工程无关；每个陷阱自动保存为{' '}
+          <code>traps/&#123;trap_id&#125;.json</code>。
         </p>
-        <button
-          type="button"
-          onClick={() => onTrapsChange([...traps, createDefaultTrapDefinition(traps.length)])}
-        >
+        <button type="button" onClick={handleAddTrap}>
           添加陷阱
         </button>
       </div>
-      <table className="data-table compact trap-library-table">
+      <table className="data-table trap-library-table">
         <thead>
           <tr>
             <th>识别图</th>
             <th>trap_id</th>
             <th>名称</th>
-            <th>选择键</th>
-            <th>升级键</th>
             <th>花费</th>
             <th>升级花费</th>
             <th>最大等级</th>
+            <th>升级模式</th>
+            <th>按住升级 ms</th>
             <th />
           </tr>
         </thead>
@@ -108,14 +119,13 @@ export function TrapLibraryPanel({
                 onClick={() => onSelect({ kind: 'trap', trapId: t.trap_id })}
               >
                 <td className="trap-thumb-cell" onClick={(e) => e.stopPropagation()}>
-                  <TrapThumb projectRoot={projectRoot} relativePath={t.recognitionImageRelative} />
+                  <TrapThumb
+                    relativePath={t.recognitionImageRelative}
+                    refreshKey={thumbRevisions[t.trap_id]}
+                  />
                   <div className="trap-thumb-actions">
-                    <button
-                      type="button"
-                      disabled={!projectRoot}
-                      onClick={() => void handleImportImage(i, t.trap_id)}
-                    >
-                      导入
+                    <button type="button" onClick={() => void handleImportImage(i, t.trap_id)}>
+                      导入识别图
                     </button>
                     {t.recognitionImageRelative && (
                       <button
@@ -131,11 +141,11 @@ export function TrapLibraryPanel({
                   [
                     ['trap_id', 'text'],
                     ['trap_name', 'text'],
-                    ['select_key', 'text'],
-                    ['upgrade_key', 'text'],
                     ['cost', 'number'],
                     ['upgrade_cost', 'number'],
-                    ['max_level', 'number']
+                    ['max_level', 'number'],
+                    ['upgrade_mode', 'text'],
+                    ['upgrade_hold_ms', 'number']
                   ] as const
                 ).map(([field, kind]) => (
                   <td key={field}>
@@ -146,7 +156,7 @@ export function TrapLibraryPanel({
                       onChange={(e) => {
                         const v =
                           kind === 'number' ? Number(e.target.value) || 0 : e.target.value
-                        updateTrap(i, { [field]: v } as Partial<TrapDefinition>)
+                        updateTrap(i, { [field]: v } as Partial<TrapLibraryEntry>)
                       }}
                     />
                   </td>
@@ -172,7 +182,7 @@ export function TrapLibraryPanel({
         </tbody>
       </table>
       {traps.length === 0 && (
-        <p className="hint trap-library-empty">暂无陷阱，点击「添加陷阱」创建工程共享陷阱。</p>
+        <p className="hint trap-library-empty">暂无陷阱，点击「添加陷阱」创建并自动保存到应用目录。</p>
       )}
     </section>
   )

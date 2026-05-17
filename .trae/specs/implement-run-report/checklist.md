@@ -1,0 +1,8 @@
+- [x] ActionLog dataclass 定义完整，含 action_type, action_name, wave, started_at, finished_at, success, retry_count, error_message, extra 字段及默认值
+- [x] RunReport dataclass 定义完整，含 script_id, script_name, started_at, finished_at, result, total_waves, actions, metadata 字段及默认值
+- [x] RunReport.add_action() 可追加 ActionLog 到 actions 列表
+- [x] RunReport.summary() 返回包含 total, success, fail, duration_seconds 的 dict
+- [x] ActionLog.to_dict() 和 RunReport.to_dict() 正确序列化，datetime 为 ISO 8601 字符串
+- [x] write_report() 将 RunReport 写入合法 JSON 文件
+- [x] write_report() 在父目录不存在时自动创建
+- [x] 单元测试覆盖：ActionLog/RunReport 创建与默认值、add_action、summary、to_dict 序列化、write_report 文件输出、目录自动创建
