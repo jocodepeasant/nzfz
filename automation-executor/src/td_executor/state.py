@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from td_executor.runtime.window import WindowRect
 
 
+@dataclass
 class GameState:
     """Tracks wave, resources, HP, UI flags; implementation pending."""
 

@@ -65,6 +65,11 @@ class ScreenCapture:
         if self._backend_impl is not None:
             if self._config.backend == CaptureBackend.MSS:
                 self._backend_impl.close()
+            elif self._config.backend == CaptureBackend.DXCAM:
+                try:
+                    self._backend_impl.release()
+                except Exception:
+                    pass
             self._backend_impl = None
 
     def capture_frame(self) -> np.ndarray:

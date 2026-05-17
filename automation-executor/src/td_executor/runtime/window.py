@@ -5,8 +5,22 @@ from __future__ import annotations
 import sys
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_mss_instance: Any = None
+
+
+def _get_mss_monitors() -> dict:
+    global _mss_instance
+    if _mss_instance is None:
+        try:
+            import mss
+            _mss_instance = mss.mss()
+        except ImportError:
+            return {"left": 0, "top": 0, "width": 1920, "height": 1080}
+    return _mss_instance.monitors[0]
 
 
 @dataclass
@@ -120,13 +134,8 @@ def _is_window_valid_win(hwnd: int) -> bool:
 
 def _find_game_window_fallback(title_keyword: str) -> WindowRect | None:
     logger.warning("非 Windows 平台，窗口定位功能受限，使用全屏区域作为降级方案")
-    try:
-        import mss
-
-        monitor = mss.mss().monitors[0]
-        return WindowRect(hwnd=0, left=monitor["left"], top=monitor["top"], width=monitor["width"], height=monitor["height"])
-    except ImportError:
-        return WindowRect(hwnd=0, left=0, top=0, width=1920, height=1080)
+    monitor = _get_mss_monitors()
+    return WindowRect(hwnd=0, left=monitor["left"], top=monitor["top"], width=monitor["width"], height=monitor["height"])
 
 
 def _focus_window_fallback(hwnd: int) -> bool:
@@ -135,13 +144,8 @@ def _focus_window_fallback(hwnd: int) -> bool:
 
 
 def _get_window_rect_fallback(hwnd: int) -> WindowRect | None:
-    try:
-        import mss
-
-        monitor = mss.mss().monitors[0]
-        return WindowRect(hwnd=0, left=monitor["left"], top=monitor["top"], width=monitor["width"], height=monitor["height"])
-    except ImportError:
-        return WindowRect(hwnd=0, left=0, top=0, width=1920, height=1080)
+    monitor = _get_mss_monitors()
+    return WindowRect(hwnd=0, left=monitor["left"], top=monitor["top"], width=monitor["width"], height=monitor["height"])
 
 
 def _is_window_valid_fallback(hwnd: int) -> bool:

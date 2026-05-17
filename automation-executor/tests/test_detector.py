@@ -10,10 +10,10 @@ import pytest
 from td_executor.vision.detector import (
     DetectorConfig,
     VisionDetector,
-    crop_roi,
     _load_template,
     _match_single,
 )
+from td_executor.vision.utils import crop_roi
 
 
 class TestDetectorConfig:
@@ -66,13 +66,9 @@ class TestCropRoi:
 
 class TestLoadTemplate:
     def test_file_not_exists(self) -> None:
-        result = _load_template("/nonexistent/path/template.png")
+        mock_cv2 = MagicMock()
+        result = _load_template(mock_cv2, "/nonexistent/path/template.png")
         assert result is None
-
-    def test_cv2_not_available(self) -> None:
-        with patch.dict(sys.modules, {"cv2": None}):
-            result = _load_template("/some/path.png")
-            assert result is None
 
 
 class TestMatchSingle:
@@ -83,9 +79,8 @@ class TestMatchSingle:
         mock_cv2.TM_CCOEFF_NORMED = 5
         mock_cv2.matchTemplate.return_value = MagicMock()
         mock_cv2.minMaxLoc.return_value = (0.0, 0.95, (0, 0), (10, 20))
-        with patch.dict(sys.modules, {"cv2": mock_cv2}):
-            result = _match_single(frame, template, 0.8)
-            assert result is True
+        result = _match_single(mock_cv2, frame, template, 0.8)
+        assert result is True
 
     def test_match_failure(self) -> None:
         frame = np.random.randint(0, 255, (100, 200, 3), dtype=np.uint8)
@@ -94,9 +89,8 @@ class TestMatchSingle:
         mock_cv2.TM_CCOEFF_NORMED = 5
         mock_cv2.matchTemplate.return_value = MagicMock()
         mock_cv2.minMaxLoc.return_value = (0.0, 0.5, (0, 0), (10, 20))
-        with patch.dict(sys.modules, {"cv2": mock_cv2}):
-            result = _match_single(frame, template, 0.8)
-            assert result is False
+        result = _match_single(mock_cv2, frame, template, 0.8)
+        assert result is False
 
 
 class TestVisionDetectorInit:
@@ -125,6 +119,7 @@ class TestVisionDetectorMatchTemplate:
         cfg = DetectorConfig(multi_frame_count=multi_frame_count, templates_dir="/tmp/tpl")
         det = VisionDetector(config=cfg)
         det._cv2_available = True
+        det._cv2 = MagicMock()
         return det
 
     def test_single_frame_match(self) -> None:
@@ -207,6 +202,7 @@ class TestIsMapUiOpen:
         cfg = DetectorConfig(templates_dir="/tmp/tpl")
         det = VisionDetector(config=cfg)
         det._cv2_available = True
+        det._cv2 = MagicMock()
         return det
 
     def test_map_ui_open(self) -> None:
@@ -241,6 +237,7 @@ class TestSlotState:
         cfg = DetectorConfig(templates_dir="/tmp/tpl")
         det = VisionDetector(config=cfg)
         det._cv2_available = True
+        det._cv2 = MagicMock()
         return det
 
     def test_slot_empty(self) -> None:
@@ -277,6 +274,7 @@ class TestDetectErrorTip:
         cfg = DetectorConfig(templates_dir="/tmp/tpl")
         det = VisionDetector(config=cfg)
         det._cv2_available = True
+        det._cv2 = MagicMock()
         return det
 
     def test_error_tip_detected(self) -> None:

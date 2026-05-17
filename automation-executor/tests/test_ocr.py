@@ -10,7 +10,6 @@ import td_executor.vision.ocr as ocr_mod
 from td_executor.runtime.capture import ScreenCapture
 from td_executor.runtime.window import WindowRect
 from td_executor.vision.ocr import (
-    _crop_roi,
     _majority_vote,
     _ocr_digits,
     _preprocess_for_digits,
@@ -18,15 +17,16 @@ from td_executor.vision.ocr import (
     read_digits_roi,
     read_resource,
     read_wave,
+    reset_ocr_engine,
 )
+from td_executor.vision.utils import crop_roi
 
 
 @pytest.fixture(autouse=True)
 def _reset_ocr_engine():
-    original = ocr_mod._ocr_engine
-    ocr_mod._ocr_engine = None
+    reset_ocr_engine()
     yield
-    ocr_mod._ocr_engine = original
+    reset_ocr_engine()
 
 
 def _make_rect() -> WindowRect:
@@ -45,14 +45,14 @@ class TestCropRoi:
     def test_normal_crop(self) -> None:
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
         roi = {"x_ratio": 0.1, "y_ratio": 0.2, "w_ratio": 0.3, "h_ratio": 0.4}
-        result = _crop_roi(frame, roi)
+        result = crop_roi(frame, roi)
         assert result.shape[0] == 40
         assert result.shape[1] == 30
 
     def test_boundary_clamp(self) -> None:
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
         roi = {"x_ratio": 0.9, "y_ratio": 0.9, "w_ratio": 0.2, "h_ratio": 0.2}
-        result = _crop_roi(frame, roi)
+        result = crop_roi(frame, roi)
         assert result.shape[0] <= 100
         assert result.shape[1] <= 100
         assert result.shape[0] >= 0
@@ -61,7 +61,7 @@ class TestCropRoi:
     def test_zero_size_roi(self) -> None:
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
         roi = {"x_ratio": 0.0, "y_ratio": 0.0, "w_ratio": 0.0, "h_ratio": 0.0}
-        result = _crop_roi(frame, roi)
+        result = crop_roi(frame, roi)
         assert isinstance(result, np.ndarray)
 
 
@@ -273,7 +273,7 @@ class TestReadCoreHp:
         rois = {"core_hp": {"x_ratio": 0.0, "y_ratio": 0.0, "w_ratio": 0.5, "h_ratio": 0.5}}
         with patch("td_executor.vision.ocr.read_digits_roi", side_effect=["100", "100", "99"]):
             with patch("td_executor.vision.ocr.time.sleep"):
-                result = read_core_hp(cap, rect, rois, multi_frame={"slot_state_frames": 3})
+                result = read_core_hp(cap, rect, rois, multi_frame={"core_hp_frames": 3})
                 assert result == 100
 
     def test_no_roi(self) -> None:

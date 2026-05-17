@@ -6,9 +6,11 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from td_executor.vision.utils import crop_roi
 
 if TYPE_CHECKING:
     from td_executor.runtime.capture import ScreenCapture
@@ -25,24 +27,7 @@ class DetectorConfig:
     templates_dir: str = "assets/templates"
 
 
-def crop_roi(frame: np.ndarray, roi: dict) -> np.ndarray:
-    x = int(frame.shape[1] * roi["x_ratio"])
-    y = int(frame.shape[0] * roi["y_ratio"])
-    w = int(frame.shape[1] * roi["w_ratio"])
-    h = int(frame.shape[0] * roi["h_ratio"])
-    x = max(0, min(x, frame.shape[1]))
-    y = max(0, min(y, frame.shape[0]))
-    w = min(w, frame.shape[1] - x)
-    h = min(h, frame.shape[0] - y)
-    return frame[y : y + h, x : x + w]
-
-
-def _load_template(template_path: str) -> np.ndarray | None:
-    try:
-        import cv2
-    except ImportError:
-        logger.warning("cv2 不可用，无法加载模板: %s", template_path)
-        return None
+def _load_template(cv2: Any, template_path: str) -> np.ndarray | None:
     p = Path(template_path)
     if not p.is_file():
         logger.warning("模板文件不存在: %s", template_path)
@@ -53,9 +38,7 @@ def _load_template(template_path: str) -> np.ndarray | None:
     return img
 
 
-def _match_single(frame: np.ndarray, template: np.ndarray, threshold: float) -> bool:
-    import cv2
-
+def _match_single(cv2: Any, frame: np.ndarray, template: np.ndarray, threshold: float) -> bool:
     result = cv2.matchTemplate(frame, template, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, _ = cv2.minMaxLoc(result)
     return max_val >= threshold
@@ -64,9 +47,11 @@ def _match_single(frame: np.ndarray, template: np.ndarray, threshold: float) -> 
 class VisionDetector:
     def __init__(self, config: DetectorConfig | None = None) -> None:
         self._config = config or DetectorConfig()
+        self._cv2: Any = None
         try:
-            import cv2  # noqa: F401
+            import cv2
 
+            self._cv2 = cv2
             self._cv2_available = True
         except ImportError:
             self._cv2_available = False
@@ -85,20 +70,20 @@ class VisionDetector:
             return False
         if threshold is None:
             threshold = self._config.match_threshold
-        frame = capture.capture_frame()
-        cropped = crop_roi(frame, roi)
-        template = _load_template(template_path)
+        template = _load_template(self._cv2, template_path)
         if template is None:
             return False
         if self._config.multi_frame_count <= 1:
-            return _match_single(cropped, template, threshold)
+            frame = capture.capture_frame()
+            cropped = crop_roi(frame, roi)
+            return _match_single(self._cv2, cropped, template, threshold)
         match_count = 0
         for i in range(self._config.multi_frame_count):
             if i > 0:
                 time.sleep(self._config.multi_frame_interval_ms / 1000.0)
             frame = capture.capture_frame()
             cropped = crop_roi(frame, roi)
-            if _match_single(cropped, template, threshold):
+            if _match_single(self._cv2, cropped, template, threshold):
                 match_count += 1
         return match_count > self._config.multi_frame_count // 2
 
