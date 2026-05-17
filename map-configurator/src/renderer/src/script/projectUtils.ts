@@ -1,4 +1,4 @@
-import type { ProjectFileV1, ProjectFloor, RatioRect, SlotRow, TowerDefenseScript, TrapDefinition } from './types'
+import type { ProjectFileV1, ProjectFloor, RatioRect, SlotRow, TowerDefenseScript, TrapLibraryEntry } from './types'
 import { DEFAULT_SLOT_DEFAULTS, getFloorContentRect, normalizeContentRect } from './mapCoords'
 import { definitionFromUnknown, trapsForExport } from './trapUtils'
 
@@ -55,7 +55,7 @@ export function normalizeProjectFile(raw: unknown): ProjectFileV1 {
         }
       : { ...DEFAULT_SLOT_DEFAULTS }
   const traps = Array.isArray(o.traps)
-    ? (o.traps.map(definitionFromUnknown).filter(Boolean) as TrapDefinition[])
+    ? (o.traps.map(definitionFromUnknown).filter(Boolean) as TrapLibraryEntry[])
     : undefined
   return { version: 1, floors, activeFloorId, slotDefaults, traps }
 }

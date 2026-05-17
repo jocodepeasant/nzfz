@@ -23,7 +23,7 @@
     "directories": {
       "output": "release"
     },
-    "files": ["out/**", "package.json"]
+    "files": ["out/**", "package.json", "traps/**", "assets/verify_templates/**"]
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

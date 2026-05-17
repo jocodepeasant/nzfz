@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EditorSelection, ProjectFileV1, ProjectFloor, RatioRect, TowerDefenseScript, TrapDefinition } from './script/types'
+import type { EditorSelection, ProjectFileV1, ProjectFloor, RatioRect, TowerDefenseScript, TrapLibraryEntry } from './script/types'
 import {
   createDefaultScript,
   createSlotAt,
@@ -28,7 +28,13 @@ import {
   normalizeProjectFile,
   nextFloorId
 } from './script/projectUtils'
-import { definitionFromTrapRow, syncScriptTraps } from './script/trapUtils'
+import {
+  parseTrapDefinitionsFromDisk,
+  projectJsonWithoutTraps,
+  syncScriptTraps
+} from './script/trapUtils'
+
+type WorkspaceView = 'map' | 'trapLibrary'
 import { MapCanvas } from './MapCanvas'
 import { InspectorPanel } from './InspectorPanel'
 import { TrapLibraryPanel } from './TrapLibraryPanel'
@@ -61,8 +67,9 @@ export function EditorWorkspace(): JSX.Element {
   const [mapTool, setMapTool] = useState<MapToolMode>(idleTool)
   const [mapViewport, setMapViewport] = useState<MapViewport>(DEFAULT_MAP_VIEWPORT)
   const [pendingRoiId, setPendingRoiId] = useState('roi_1')
-  const [trapLibraryOpen, setTrapLibraryOpen] = useState(false)
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('map')
   const imgNaturalRef = useRef({ width: 1920, height: 1080 })
+  const prevTrapIdsRef = useRef<string[]>([])
 
   const activeFloorId = projectFile.activeFloorId ?? projectFile.floors[0]?.floor_id ?? '1'
   const defaultFloorId = activeFloorId
@@ -135,20 +142,29 @@ export function EditorWorkspace(): JSX.Element {
   }, [])
 
   const persistProjectFile = useCallback(async (root: string, pf: ProjectFileV1) => {
-    await window.projectApi.writeProjectJson(root, pf)
+    await window.projectApi.writeProjectJson(root, projectJsonWithoutTraps(pf))
   }, [])
 
   const handleTrapsChange = useCallback(
-    (traps: TrapDefinition[]) => {
-      setProjectFile((pf) => {
-        const next = { ...pf, traps }
-        if (projectRoot) void persistProjectFile(projectRoot, next)
-        return next
-      })
+    (traps: TrapLibraryEntry[]) => {
+      const prevIds = prevTrapIdsRef.current
+      void window.trapApi.syncTrapDefinitions(traps, prevIds)
+      prevTrapIdsRef.current = traps.map((t) => t.trap_id)
+      setProjectFile((pf) => ({ ...pf, traps }))
       setScriptAndSync((s) => syncScriptTraps(s, traps))
     },
-    [projectRoot, persistProjectFile, setScriptAndSync]
+    [setScriptAndSync]
   )
+
+  useEffect(() => {
+    void (async () => {
+      const diskResult = await window.trapApi.listTrapDefinitions()
+      const traps = parseTrapDefinitionsFromDisk(diskResult.traps)
+      prevTrapIdsRef.current = traps.map((t) => t.trap_id)
+      setProjectFile((pf) => ({ ...pf, traps }))
+      setScriptAndSync((s) => syncScriptTraps(s, traps))
+    })()
+  }, [setScriptAndSync])
 
   const openOrInitProject = useCallback(
     async (root: string) => {
@@ -168,19 +184,21 @@ export function EditorWorkspace(): JSX.Element {
         nextScript = createDefaultScript()
       }
 
-      if (!pf.traps?.length && nextScript.traps.length > 0) {
-        pf = { ...pf, traps: nextScript.traps.map(definitionFromTrapRow) }
-      }
-      const traps = pf.traps ?? []
-      nextScript = syncScriptTraps(nextScript, traps)
+      const diskResult = await window.trapApi.listTrapDefinitions()
+      const traps = parseTrapDefinitionsFromDisk(diskResult.traps)
 
-      await window.projectApi.writeProjectJson(root, pf)
+      pf = { ...pf, traps }
+      nextScript = syncScriptTraps(nextScript, traps)
+      prevTrapIdsRef.current = traps.map((t) => t.trap_id)
+
+      await persistProjectFile(root, pf)
 
       setScript(nextScript)
       syncRawFromScript(nextScript)
       setPendingRoiId(nextRoiId(nextScript))
       setProjectFile(pf)
       setProjectRoot(root)
+      setWorkspaceView('map')
       setSelection({ kind: 'none' })
       setMapTool(idleTool())
       setStatus('idle')
@@ -190,7 +208,7 @@ export function EditorWorkspace(): JSX.Element {
       const floor = pf.floors.find((f) => f.floor_id === floorId)
       await loadFloorPreview(root, floor?.imageRelative)
     },
-    [loadFloorPreview, syncRawFromScript]
+    [loadFloorPreview, persistProjectFile, syncRawFromScript]
   )
 
   useEffect(() => {
@@ -461,23 +479,27 @@ export function EditorWorkspace(): JSX.Element {
   }
 
   return (
-    <div className="workspace">
+    <div className={`workspace ${workspaceView === 'trapLibrary' ? 'trap-library-mode' : ''}`}>
       <header className="workspace-topbar">
         <div className="topbar-title">
           <h1>塔防地图配置器</h1>
-          <p className="muted">单页工作台 · 地图工具模式</p>
+          <p className="muted">
+            {workspaceView === 'map' ? '单页工作台 · 地图工具模式' : '工程陷阱库'}
+          </p>
         </div>
         <div className="topbar-actions">
           <button type="button" onClick={() => void handleSelectProject()}>
             {projectRoot ? '切换工程' : '选择工程目录'}
           </button>
-          <button
-            type="button"
-            className={trapLibraryOpen ? 'active' : ''}
-            onClick={() => setTrapLibraryOpen((v) => !v)}
-          >
-            陷阱库
-          </button>
+          {workspaceView === 'map' ? (
+            <button type="button" onClick={() => setWorkspaceView('trapLibrary')}>
+              陷阱库
+            </button>
+          ) : (
+            <button type="button" className="active" onClick={() => setWorkspaceView('map')}>
+              返回地图
+            </button>
+          )}
           <span className="topbar-path" title={projectRoot ?? ''}>
             {projectRoot ?? '（未选择工程）'}
           </span>
@@ -489,7 +511,7 @@ export function EditorWorkspace(): JSX.Element {
         </div>
       </header>
 
-      {errors.length > 0 && (
+      {workspaceView === 'map' && errors.length > 0 && (
         <ul className="errors workspace-errors">
           {errors.map((e, i) => (
             <li key={`${e.path}-${i}`}>
@@ -499,17 +521,17 @@ export function EditorWorkspace(): JSX.Element {
         </ul>
       )}
 
-      <TrapLibraryPanel
-        open={trapLibraryOpen}
-        projectRoot={projectRoot}
-        traps={projectFile.traps ?? []}
-        selection={selection}
-        onTrapsChange={handleTrapsChange}
-        onSelect={setSelection}
-      />
-
       <div className="workspace-main">
-        <MapCanvas
+        {workspaceView === 'trapLibrary' ? (
+          <TrapLibraryPanel
+            traps={projectFile.traps ?? []}
+            selection={selection}
+            onTrapsChange={handleTrapsChange}
+            onSelect={setSelection}
+          />
+        ) : (
+          <>
+            <MapCanvas
           floorDataUrl={floorDataUrl}
           activeFloor={activeFloor}
           script={script}
@@ -563,6 +585,8 @@ export function EditorWorkspace(): JSX.Element {
           pendingRoiId={pendingRoiId}
           onPendingRoiIdChange={setPendingRoiId}
         />
+          </>
+        )}
       </div>
     </div>
   )

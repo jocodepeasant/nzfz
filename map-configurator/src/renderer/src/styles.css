@@ -327,12 +327,26 @@ textarea {
   border-color: #58a6ff;
   background: #1f2a36;
 }
-.trap-library-drawer {
-  border-bottom: 1px solid #30363d;
-  background: #0d1117;
-  padding: 12px 14px;
-  max-height: 42vh;
+.trap-library-page {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+  padding: 16px 20px 24px;
+  background: #0d1117;
+}
+.workspace.trap-library-mode .workspace-main {
+  grid-template-columns: 1fr;
+}
+.trap-library-page .trap-thumb {
+  width: 64px;
+  height: 64px;
+}
+.trap-library-table {
+  width: 100%;
+}
+.trap-library-table input {
+  width: 100%;
+  min-width: 72px;
 }
 .trap-library-header {
   display: flex;
