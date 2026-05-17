@@ -1,10 +1,10 @@
-- [ ] `_crop_roi()` 根据 ROI 比例坐标正确裁剪子图，越界时自动 clamp
-- [ ] `_preprocess_for_digits()` 对 BGR 图像做灰度化 + OTSU 二值化，OpenCV 不可用时降级返回原图
-- [ ] `_get_ocr_engine()` 懒加载 PaddleOCR 单例，不可用时返回 None 并打印 warning
-- [ ] `_ocr_digits()` 调用 PaddleOCR 识别数字，正则清洗返回纯数字字符串，PaddleOCR 不可用返回空字符串
-- [ ] `read_digits_roi()` 完整流程：截图 → 裁剪 ROI → 预处理 → OCR → 返回纯数字字符串
-- [ ] `_majority_vote()` 对多帧识别结果取众数，空列表返回 None
-- [ ] `read_wave()` 返回 int 或 None，支持多帧投票
-- [ ] `read_resource()` 返回 int 或 None，支持多帧投票
-- [ ] `read_core_hp()` 返回 int 或 None，支持多帧投票
-- [ ] 单元测试覆盖：ROI 裁剪、预处理、OCR 降级、多帧投票、高层识别函数、全局 PaddleOCR 不可用降级
+- [x] `_crop_roi()` 根据 ROI 比例坐标正确裁剪子图，越界时自动 clamp
+- [x] `_preprocess_for_digits()` 对 BGR 图像做灰度化 + OTSU 二值化，OpenCV 不可用时降级返回原图
+- [x] `_get_ocr_engine()` 懒加载 PaddleOCR 单例，不可用时返回 None 并打印 warning
+- [x] `_ocr_digits()` 调用 PaddleOCR 识别数字，正则清洗返回纯数字字符串，PaddleOCR 不可用返回空字符串
+- [x] `read_digits_roi()` 完整流程：截图 → 裁剪 ROI → 预处理 → OCR → 返回纯数字字符串
+- [x] `_majority_vote()` 对多帧识别结果取众数，空列表返回 None
+- [x] `read_wave()` 返回 int 或 None，支持多帧投票
+- [x] `read_resource()` 返回 int 或 None，支持多帧投票
+- [x] `read_core_hp()` 返回 int 或 None，支持多帧投票
+- [x] 单元测试覆盖：ROI 裁剪、预处理、OCR 降级、多帧投票、高层识别函数、全局 PaddleOCR 不可用降级
