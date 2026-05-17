@@ -35,11 +35,6 @@ contextBridge.exposeInMainWorld('projectApi', {
     floorId: string
   ): Promise<{ cancelled: true } | { cancelled: false; relativePath: string }> =>
     ipcRenderer.invoke('project-import-floor-image', projectRoot, floorId),
-  importTrapRecognitionImage: (
-    projectRoot: string,
-    trapId: string
-  ): Promise<{ cancelled: true } | { cancelled: false; relativePath: string }> =>
-    ipcRenderer.invoke('project-import-trap-recognition-image', projectRoot, trapId),
   readFileBase64: (
     projectRoot: string,
     relativePath: string
@@ -47,4 +42,21 @@ contextBridge.exposeInMainWorld('projectApi', {
     ipcRenderer.invoke('project-read-file-base64', projectRoot, relativePath),
   fileExists: (projectRoot: string, relativePath: string): Promise<{ exists: boolean }> =>
     ipcRenderer.invoke('project-file-exists', projectRoot, relativePath)
+})
+
+contextBridge.exposeInMainWorld('trapApi', {
+  listTrapDefinitions: (): Promise<{ traps: unknown[] }> =>
+    ipcRenderer.invoke('trap-list-definitions'),
+  syncTrapDefinitions: (
+    traps: unknown[],
+    previousTrapIds: string[]
+  ): Promise<{ ok: true }> => ipcRenderer.invoke('trap-sync-definitions', traps, previousTrapIds),
+  importTrapRecognitionImage: (
+    trapId: string
+  ): Promise<{ cancelled: true } | { cancelled: false; relativePath: string }> =>
+    ipcRenderer.invoke('trap-import-recognition-image', trapId),
+  readFileBase64: (relativePath: string): Promise<{ base64: string; mime: string }> =>
+    ipcRenderer.invoke('trap-read-file-base64', relativePath),
+  fileExists: (relativePath: string): Promise<{ exists: boolean }> =>
+    ipcRenderer.invoke('trap-file-exists')
 })

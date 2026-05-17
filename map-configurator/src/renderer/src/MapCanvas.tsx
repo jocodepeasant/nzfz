@@ -102,6 +102,7 @@ export function MapCanvas({
   const panRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null)
   const [drawPreview, setDrawPreview] = useState<RatioRect | null>(null)
   const [spaceHeld, setSpaceHeld] = useState(false)
+  const [isPanning, setIsPanning] = useState(false)
   const [imgNatural, setImgNatural] = useState<{ w: number; h: number } | null>(null)
 
   useEffect(() => {
@@ -236,7 +237,8 @@ export function MapCanvas({
   }
 
   const handleOverlayPointerDown = (ev: React.PointerEvent) => {
-    const isPan = ev.button === 1 || (ev.button === 0 && spaceHeld)
+    const isPan =
+      ev.button === 1 || ev.button === 2 || (ev.button === 0 && spaceHeld)
     if (isPan) {
       panRef.current = {
         startX: ev.clientX,
@@ -244,6 +246,7 @@ export function MapCanvas({
         panX: mapViewport.panX,
         panY: mapViewport.panY
       }
+      setIsPanning(true)
       return
     }
     if (ev.button !== 0) return
@@ -298,6 +301,7 @@ export function MapCanvas({
   const handleOverlayPointerUp = (ev: React.PointerEvent) => {
     if (panRef.current) {
       panRef.current = null
+      setIsPanning(false)
       return
     }
     if (slotDragRef.current) {
@@ -355,7 +359,8 @@ export function MapCanvas({
 
   return (
     <div
-      className={`map-canvas ${mapTool.kind !== 'idle' ? 'tool-active' : ''} ${spaceHeld ? 'pan-cursor' : ''}`}
+      className={`map-canvas ${mapTool.kind !== 'idle' ? 'tool-active' : ''} ${spaceHeld || isPanning ? 'pan-cursor' : ''}`}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerMove={handleOverlayPointerMove}
       onPointerUp={handleOverlayPointerUp}
       onPointerLeave={handleOverlayPointerUp}
@@ -479,7 +484,7 @@ export function MapCanvas({
           删除选中
         </button>
         <span className="hint map-tool-status">
-          {toolLabel(mapTool)} · 方向键平移/移槽位 · Shift+方向键平移 · 滚轮以指针缩放 · Delete 删除
+          {toolLabel(mapTool)} · 右键/中键/空格+左键拖拽平移 · 方向键平移/移槽位 · Shift+方向键平移 · 滚轮以指针缩放 · Delete 删除
         </span>
       </div>
 

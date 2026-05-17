@@ -18,7 +18,6 @@ export function resolveSafe(projectRoot: string, relativePath: string): string {
 
 export async function ensureProjectDirs(projectRoot: string): Promise<void> {
   await mkdir(join(projectRoot, 'assets'), { recursive: true })
-  await mkdir(join(projectRoot, 'assets', 'verify_templates'), { recursive: true })
   await mkdir(join(projectRoot, 'export'), { recursive: true })
 }
 
@@ -75,36 +74,6 @@ export async function importFloorImage(
   const ext = parts.length > 1 ? parts.pop()?.toLowerCase() : 'png'
   const safeExt = ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp' ? ext : 'png'
   const relativePath = join('assets', `floor_${sanitizeFloorId(floorId)}.${safeExt}`).replace(/\\/g, '/')
-  const dest = resolveSafe(projectRoot, relativePath)
-  await copyFile(r.filePaths[0], dest)
-  return { cancelled: false as const, relativePath }
-}
-
-function sanitizeTrapId(trapId: string): string {
-  const s = trapId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)
-  return s || 'trap'
-}
-
-export async function importTrapRecognitionImage(
-  projectRoot: string,
-  trapId: string,
-  parent?: BrowserWindow | null
-): Promise<{ cancelled: true } | { cancelled: false; relativePath: string }> {
-  const r = await dialog.showOpenDialog(parent ?? undefined, {
-    properties: ['openFile'],
-    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
-  })
-  if (r.canceled || !r.filePaths[0]) {
-    return { cancelled: true as const }
-  }
-  await ensureProjectDirs(projectRoot)
-  const parts = r.filePaths[0].split('.')
-  const ext = parts.length > 1 ? parts.pop()?.toLowerCase() : 'png'
-  const safeExt = ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp' ? ext : 'png'
-  const relativePath = join('assets', 'verify_templates', `trap_${sanitizeTrapId(trapId)}.${safeExt}`).replace(
-    /\\/g,
-    '/'
-  )
   const dest = resolveSafe(projectRoot, relativePath)
   await copyFile(r.filePaths[0], dest)
   return { cancelled: false as const, relativePath }
