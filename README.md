@@ -6,6 +6,7 @@
 
 | 路径 | 说明 |
 |------|------|
+| [`docs/`](docs/) | 地图配置器 V2 需求草案等 |
 | [`schemas/`](schemas/) | `tower_defense_script_v1.schema.json` 与示例脚本 |
 | [`map-configurator/`](map-configurator/) | 地图配置器：打开 / 校验 / 预览 / 导出 JSON |
 | [`automation-executor/`](automation-executor/) | 执行器 CLI：`validate`、`run --dry-run` |
@@ -32,3 +33,4 @@ python -m td_executor run ../schemas/examples/space_station_normal_baseline_v1.j
 ## 设计文档
 
 - [`tower_defense_automation_design_v1.md`](tower_defense_automation_design_v1.md)
+- [`docs/tower_defense_map_configurator_requirements_v2_draft.md`](docs/tower_defense_map_configurator_requirements_v2_draft.md)（地图配置器 V2 需求草案：画布、对象模型、楼层协议、MVP、E2E）

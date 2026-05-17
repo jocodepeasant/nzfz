@@ -11,6 +11,9 @@
     "pack": "electron-builder --dir"
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/search": "^6.5.11",
+    "@uiw/react-codemirror": "^4.23.7",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1"
   },

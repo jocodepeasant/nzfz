@@ -65,6 +65,28 @@
         "y_ratio": { "type": "number" }
       }
     },
+    "mapFloor": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["floor_id", "name"],
+      "properties": {
+        "floor_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "base_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 1 },
+            "height": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "editor_reference_image": {
+          "type": "string",
+          "description": "Configurator-only path or URI to floor screenshot; executor may ignore."
+        }
+      }
+    },
     "map": {
       "type": "object",
       "additionalProperties": true,
@@ -99,6 +121,24 @@
           "properties": {
             "type": { "type": "string" },
             "origin_region_id": { "type": "string" }
+          }
+        },
+        "default_floor_id": {
+          "type": "string",
+          "description": "When map.floors is present, slots/regions omitting floor_id use this floor."
+        },
+        "floors": {
+          "type": "array",
+          "description": "Optional multi-floor metadata; one reference image per floor in editor.",
+          "items": { "$ref": "#/$defs/mapFloor" }
+        },
+        "calibration": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional window/content mapping. Recommended: content_rect (ratioRect on reference image), reference_image.",
+          "properties": {
+            "content_rect": { "$ref": "#/$defs/ratioRect" },
+            "reference_image": { "type": "string" }
           }
         }
       }
@@ -189,6 +229,10 @@
       "additionalProperties": true,
       "required": ["region_id", "name", "description", "enter_actions"],
       "properties": {
+        "floor_id": {
+          "type": "string",
+          "description": "Optional; ties region to map.floors[].floor_id when multi-floor."
+        },
         "region_id": { "type": "string" },
         "name": { "type": "string" },
         "description": { "type": "string" },
@@ -214,6 +258,10 @@
         "verify"
       ],
       "properties": {
+        "floor_id": {
+          "type": "string",
+          "description": "Optional; ties slot to map.floors[].floor_id when multi-floor."
+        },
         "slot_id": { "type": "string" },
         "name": { "type": "string" },
         "region_id": { "type": "string" },
