@@ -1,14 +1,14 @@
-- [ ] DetectorConfig 数据类定义完整，含 match_threshold / multi_frame_count / multi_frame_interval_ms 字段及默认值
-- [ ] crop_roi 函数按 ROI 比例坐标裁剪子图，含边界 clamp
-- [ ] VisionDetector.__init__ 接收 DetectorConfig，检测 OpenCV 可用性
-- [ ] VisionDetector.match_template 支持单帧和多帧模板匹配，模板不存在时返回 False
-- [ ] VisionDetector.is_map_ui_open 从 rois 取 map_ui_indicator 进行检测
-- [ ] VisionDetector.is_slot_empty 从 slot_verify 取 check_area 进行检测
-- [ ] VisionDetector.is_slot_occupied 从 slot_verify 取 check_area 进行检测
-- [ ] VisionDetector.detect_error_tip 从 rois 取 place_error_tip 进行检测
-- [ ] 多帧投票逻辑正确：超过半数匹配返回 True，否则返回 False
-- [ ] OpenCV 不可用时所有检测方法返回 False 并打印 warning，不崩溃
-- [ ] rois 缺少对应键时返回 False 并打印 warning
-- [ ] slot_verify 缺少 check_area 时返回 False 并打印 warning
-- [ ] vision/__init__.py 正确导出 VisionDetector, DetectorConfig, crop_roi
-- [ ] 单元测试覆盖：配置、裁剪、匹配、界面检测、格子状态、错误提示、多帧投票、降级
+- [x] DetectorConfig 数据类定义完整，含 match_threshold / multi_frame_count / multi_frame_interval_ms 字段及默认值
+- [x] crop_roi 函数按 ROI 比例坐标裁剪子图，含边界 clamp
+- [x] VisionDetector.__init__ 接收 DetectorConfig，检测 OpenCV 可用性
+- [x] VisionDetector.match_template 支持单帧和多帧模板匹配，模板不存在时返回 False
+- [x] VisionDetector.is_map_ui_open 从 rois 取 map_ui_indicator 进行检测
+- [x] VisionDetector.is_slot_empty 从 slot_verify 取 check_area 进行检测
+- [x] VisionDetector.is_slot_occupied 从 slot_verify 取 check_area 进行检测
+- [x] VisionDetector.detect_error_tip 从 rois 取 place_error_tip 进行检测
+- [x] 多帧投票逻辑正确：超过半数匹配返回 True，否则返回 False
+- [x] OpenCV 不可用时所有检测方法返回 False 并打印 warning，不崩溃
+- [x] rois 缺少对应键时返回 False 并打印 warning
+- [x] slot_verify 缺少 check_area 时返回 False 并打印 warning
+- [x] vision/__init__.py 正确导出 VisionDetector, DetectorConfig, crop_roi
+- [x] 单元测试覆盖：配置、裁剪、匹配、界面检测、格子状态、错误提示、多帧投票、降级
