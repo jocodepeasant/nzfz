@@ -8,14 +8,16 @@
 ## 并行总览
 
 ```
-波次1 (可并行3人):  T01-屏幕采集  |  T02-单局日志  |  T03-重试框架
-                                        ↓
+✅ T01-屏幕采集 (已完成)
+
+波次1 (可并行2人):  T02-单局日志  |  T03-重试框架
+                                    ↓
 波次2 (可并行2人):  T04-OCR识别   |  T05-模板匹配
-                                        ↓
+                                    ↓
 波次3 (可并行2人):  T06-条件引擎  |  T07-按键动作基础
-                                        ↓
+                                    ↓
 波次4 (可并行2人):  T08-地图导航  |  T09-格子定位
-                                        ↓
+                                    ↓
 波次5 (串行):       T10-动作执行完整流程 → T11-重试集成 → T12-日志集成 → T13-批量执行
 ```
 
@@ -30,6 +32,7 @@
 - **设计文档**：参考 `/workspace/tower_defense_automation_design_v1.md`
 - **已有可依赖模块**：
   - `td_executor.runtime.window` → `WindowRect`, `find_game_window()`, `focus_window()`, `get_window_rect()`, `is_window_valid()`
+  - `td_executor.runtime.capture` → `ScreenCapture`, `CaptureConfig`, `CaptureBackend`
   - `td_executor.runtime.coordinates` → `ratio_to_pixel()`
   - `td_executor.state` → `GameState`
   - `td_executor.script.load` → `load_script_file()`
@@ -37,65 +40,50 @@
 
 ---
 
-## 波次 1：无外部依赖，可立即并行
-
----
-
-### T01 - 屏幕采集
+## ✅ T01 - 屏幕采集（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P3/P4 的前置，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/runtime/capture.py` |
-| **依赖** | `window.py`（已实现，获取窗口区域） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-screen-capture/` |
 
-#### 需求描述
-
-实现屏幕截图功能，截取游戏窗口客户区画面，返回 numpy 数组供 OCR 和模板匹配使用。
-
-#### 接口定义
+### 已实现接口
 
 ```python
-"""屏幕采集。"""
+class CaptureBackend(Enum):
+    MSS = "mss"
+    DXCAM = "dxcam"
 
-from __future__ import annotations
+@dataclass
+class CaptureConfig:
+    backend: CaptureBackend = CaptureBackend.MSS
+    region: dict[str, int] | None = None
+    output_format: str = "bgr"
 
-import numpy as np
-from td_executor.runtime.window import WindowRect
-
-
-def capture_frame(rect: WindowRect) -> np.ndarray:
-    """截取游戏窗口客户区画面，返回 BGR numpy 数组 (H, W, 3)。"""
-
-
-def capture_roi(rect: WindowRect, roi: dict) -> np.ndarray:
-    """截取窗口内指定 ROI 区域画面。
-
-    Args:
-        rect: 窗口矩形信息
-        roi: 包含 x_ratio, y_ratio, w_ratio, h_ratio 的字典
-    Returns:
-        BGR numpy 数组
-    """
+class ScreenCapture:
+    def __init__(self, config=None, *, backend="mss", region=None, output_format="bgr"): ...
+    def start(self) -> None: ...
+    def close(self) -> None: ...
+    def capture_frame(self) -> np.ndarray: ...  # 返回 BGR ndarray (H, W, 3) uint8
+    def __enter__(self) -> ScreenCapture: ...
+    def __exit__(self, *_) -> None: ...
 ```
 
-#### 实现要求
+### 使用方式（供后续任务参考）
 
-1. **Windows 平台**：优先使用 `mss` 截取指定窗口区域（`mss` 已在 `pyproject.toml` 的 `runtime` 可选依赖中）
-2. **截图区域**：根据 `WindowRect` 的 `left, top, width, height` 截取客户区
-3. **ROI 截取**：根据 ROI 的比例坐标和窗口尺寸，计算像素区域后截取子图
-4. **性能**：单帧截图耗时应 < 50ms（mss 通常可达 < 10ms）
-5. **错误处理**：截图失败时抛出明确异常，调用方可据此重试
-6. **多帧采集**：提供 `capture_multi_frames(rect, roi, count, interval_ms)` 辅助方法，按 `recognition.multi_frame` 配置采集多帧用于投票去抖
+```python
+from td_executor.runtime.window import WindowRect, find_game_window
+from td_executor.runtime.capture import ScreenCapture
 
-#### 验收标准
+rect = find_game_window("逆战")
+with ScreenCapture(region={"left": rect.left, "top": rect.top, "width": rect.width, "height": rect.height}) as cap:
+    frame = cap.capture_frame()  # np.ndarray BGR
+```
 
-- [ ] `capture_frame(rect)` 返回形状为 `(H, W, 3)` 的 BGR uint8 numpy 数组
-- [ ] `capture_roi(rect, roi)` 正确截取 ROI 子区域
-- [ ] 截图区域与 `WindowRect` 客户区一致（不包含标题栏和边框）
-- [ ] mss 不可用时抛出 `ImportError` 并给出安装提示
-- [ ] `capture_multi_frames` 可按指定帧数和间隔采集
+---
+
+## 波次 1：无外部依赖，可立即并行
 
 ---
 
@@ -258,7 +246,7 @@ class RetryManager:
 
 ---
 
-## 波次 2：依赖波次 1，可并行
+## 波次 2：依赖 T01（已完成），可立即并行
 
 ---
 
@@ -268,7 +256,7 @@ class RetryManager:
 |------|------|
 | **优先级** | P3，高 |
 | **修改文件** | `automation-executor/src/td_executor/vision/ocr.py` |
-| **依赖** | T01（capture.py 截图） |
+| **依赖** | T01 ✅（`ScreenCapture` 截图） |
 | **与其他任务冲突** | 无，独立文件 |
 
 #### 需求描述
@@ -284,12 +272,14 @@ from __future__ import annotations
 
 import numpy as np
 from td_executor.runtime.window import WindowRect
+from td_executor.runtime.capture import ScreenCapture
 
 
-def read_digits_roi(rect: WindowRect, roi: dict, keyword: str = "") -> str:
+def read_digits_roi(capture: ScreenCapture, rect: WindowRect, roi: dict, keyword: str = "") -> str:
     """从指定 ROI 区域识别数字文本。
 
     Args:
+        capture: ScreenCapture 实例（已初始化）
         rect: 窗口矩形信息
         roi: 包含 x_ratio, y_ratio, w_ratio, h_ratio 的 ROI 配置
         keyword: ROI 名称（如 "wave", "resource", "core_hp"），用于日志
@@ -298,26 +288,43 @@ def read_digits_roi(rect: WindowRect, roi: dict, keyword: str = "") -> str:
     """
 
 
-def read_wave(rect: WindowRect, rois: dict) -> int | None:
+def read_wave(capture: ScreenCapture, rect: WindowRect, rois: dict, multi_frame: dict | None = None) -> int | None:
     """识别当前波次。多帧投票取众数。"""
 
 
-def read_resource(rect: WindowRect, rois: dict) -> int | None:
+def read_resource(capture: ScreenCapture, rect: WindowRect, rois: dict, multi_frame: dict | None = None) -> int | None:
     """识别当前资源数量。多帧投票取众数。"""
 
 
-def read_core_hp(rect: WindowRect, rois: dict) -> int | None:
+def read_core_hp(capture: ScreenCapture, rect: WindowRect, rois: dict, multi_frame: dict | None = None) -> int | None:
     """识别核心血量。"""
 ```
 
 #### 实现要求
 
 1. **OCR 引擎**：使用 PaddleOCR（`pyproject.toml` 的 `ocr` 可选依赖），通过 `try/except` 处理不可用情况
-2. **ROI 截取**：调用 `capture.roi` 获取 ROI 区域截图，再送 OCR
-3. **数字预处理**：对 ROI 截图做灰度化、二值化、去噪等预处理，提升数字识别准确率
-4. **多帧投票**：按 `recognition.multi_frame` 配置采集多帧，对识别结果取众数，减少误识别
-5. **结果清洗**：用正则过滤非数字字符，返回纯数字字符串
-6. **降级方案**：PaddleOCR 不可用时，打印 warning 并返回 `None`
+2. **截图方式**：使用 `ScreenCapture` 实例截取窗口画面，通过 `region` 参数限定窗口区域
+3. **ROI 截取**：根据 ROI 的比例坐标和窗口尺寸，计算像素区域后从完整截图中裁剪子图，再送 OCR
+4. **数字预处理**：对 ROI 截图做灰度化、二值化、去噪等预处理，提升数字识别准确率
+5. **多帧投票**：按 `recognition.multi_frame` 配置采集多帧（如 `wave_frames: 5`），对识别结果取众数，减少误识别
+6. **结果清洗**：用正则过滤非数字字符，返回纯数字字符串
+7. **降级方案**：PaddleOCR 不可用时，打印 warning 并返回 `None`
+
+#### 截图与 ROI 裁剪示例
+
+```python
+# 截取窗口画面
+capture = ScreenCapture(region={"left": rect.left, "top": rect.top, "width": rect.width, "height": rect.height})
+frame = capture.capture_frame()  # BGR ndarray
+
+# 根据 ROI 裁剪子图
+roi = rois["wave"]  # {"x_ratio": 0.42, "y_ratio": 0.03, "w_ratio": 0.12, "h_ratio": 0.04}
+x = int(frame.shape[1] * roi["x_ratio"])
+y = int(frame.shape[0] * roi["y_ratio"])
+w = int(frame.shape[1] * roi["w_ratio"])
+h = int(frame.shape[0] * roi["h_ratio"])
+sub_img = frame[y:y+h, x:x+w]
+```
 
 #### 脚本 JSON 中的 ROI 配置示例
 
@@ -345,7 +352,7 @@ def read_core_hp(rect: WindowRect, rois: dict) -> int | None:
 |------|------|
 | **优先级** | P4，高 |
 | **修改文件** | `automation-executor/src/td_executor/vision/detector.py` |
-| **依赖** | T01（capture.py 截图） |
+| **依赖** | T01 ✅（`ScreenCapture` 截图） |
 | **与其他任务冲突** | 无，独立文件 |
 
 #### 需求描述
@@ -361,9 +368,11 @@ from __future__ import annotations
 
 import numpy as np
 from td_executor.runtime.window import WindowRect
+from td_executor.runtime.capture import ScreenCapture
 
 
 def match_template(
+    capture: ScreenCapture,
     rect: WindowRect,
     roi: dict,
     template_path: str,
@@ -372,6 +381,7 @@ def match_template(
     """在指定 ROI 区域内进行模板匹配。
 
     Args:
+        capture: ScreenCapture 实例（已初始化）
         rect: 窗口矩形信息
         roi: 搜索区域的比例坐标
         template_path: 模板图片文件路径
@@ -381,19 +391,19 @@ def match_template(
     """
 
 
-def is_map_ui_open(rect: WindowRect, rois: dict) -> bool:
+def is_map_ui_open(capture: ScreenCapture, rect: WindowRect, rois: dict) -> bool:
     """判断是否在地图界面（检测 map_ui_indicator）。"""
 
 
-def is_slot_empty(rect: WindowRect, slot_verify: dict) -> bool:
+def is_slot_empty(capture: ScreenCapture, rect: WindowRect, slot_verify: dict) -> bool:
     """判断格子是否为空。"""
 
 
-def is_slot_occupied(rect: WindowRect, slot_verify: dict) -> bool:
+def is_slot_occupied(capture: ScreenCapture, rect: WindowRect, slot_verify: dict) -> bool:
     """判断格子是否已放置陷阱。"""
 
 
-def detect_error_tip(rect: WindowRect, rois: dict) -> bool:
+def detect_error_tip(capture: ScreenCapture, rect: WindowRect, rois: dict) -> bool:
     """检测是否出现放置错误提示。"""
 ```
 
@@ -401,10 +411,11 @@ def detect_error_tip(rect: WindowRect, rois: dict) -> bool:
 
 1. **模板匹配**：使用 `cv2.matchTemplate` + `cv2.minMaxLoc`，支持配置阈值
 2. **模板管理**：模板图片存放在项目 `assets/templates/` 目录下，路径从脚本 JSON 或配置中获取
-3. **ROI 搜索**：先截取 ROI 区域，再在区域内做模板匹配，提升速度和准确率
-4. **多帧投票**：对需要稳定判断的场景（如格子状态），采集多帧后投票决定结果
-5. **颜色检测**：对于简单场景（如格子空/占用），可补充基于颜色直方图的快速判断
-6. **OpenCV 不可用**：`opencv-python-headless` 不可用时打印 warning 并返回 `False`
+3. **截图方式**：使用 `ScreenCapture` 实例截取窗口画面，再裁剪 ROI 区域做模板匹配
+4. **ROI 搜索**：先截取 ROI 区域，再在区域内做模板匹配，提升速度和准确率
+5. **多帧投票**：对需要稳定判断的场景（如格子状态），采集多帧后投票决定结果
+6. **颜色检测**：对于简单场景（如格子空/占用），可补充基于颜色直方图的快速判断
+7. **OpenCV 不可用**：`opencv-python-headless` 不可用时打印 warning 并返回 `False`
 
 #### 验收标准
 
@@ -455,10 +466,12 @@ from __future__ import annotations
 from typing import Any
 
 from td_executor.runtime.window import WindowRect
+from td_executor.runtime.capture import ScreenCapture
 
 
 def eval_conditions(
     conditions: dict[str, Any],
+    capture: ScreenCapture,
     rect: WindowRect,
     rois: dict,
     slots: list[dict],
@@ -469,6 +482,7 @@ def eval_conditions(
 
     Args:
         conditions: 脚本中的 conditions 对象
+        capture: ScreenCapture 实例
         rect: 当前窗口矩形
         rois: recognition.rois 配置
         slots: 脚本 slots 数组
@@ -541,7 +555,7 @@ def drag(from_x: int, from_y: int, to_x: int, to_y: int, duration_ms: int = 600)
     """从一点拖拽到另一点。"""
 
 
-def ensure_map_open(rect: Any, rois: dict) -> bool:
+def ensure_map_open(capture: Any, rect: Any, rois: dict) -> bool:
     """确保地图界面已打开，未打开则按 O 键打开。
 
     Returns:
@@ -554,7 +568,7 @@ def execute_action(action: dict, context: dict) -> dict:
 
     Args:
         action: 脚本中的 action 对象
-        context: 运行时上下文（rect, rois, slots, traps, state 等）
+        context: 运行时上下文（capture, rect, rois, slots, traps, state 等）
     Returns:
         执行结果 {"success": bool, "message": str}
     """
@@ -934,7 +948,7 @@ def run_batch(script_paths: list[Path]) -> list[dict]:
 
 | 任务 | capture.py | ocr.py | detector.py | action.py | condition.py | navigator.py | slot.py | retry.py | report.py | batch.py | cli.py | state.py |
 |------|:---------:|:------:|:-----------:|:---------:|:------------:|:------------:|:-------:|:--------:|:---------:|:--------:|:------:|:--------:|
-| T01  | ✏️ | | | | | | | | | | | |
+| T01  | ✅ | | | | | | | | | | | |
 | T02  | | | | | | | | | ✏️ | | | |
 | T03  | | | | | | | | ✏️ | | | | |
 | T04  | | ✏️ | | | | | | | | | | |
@@ -948,4 +962,25 @@ def run_batch(script_paths: list[Path]) -> list[dict]:
 | T12  | | | | ✏️ | | | | | ✏️ | | | |
 | T13  | | | | | | | | | | ✏️ | ✏️ | |
 
-> ✏️ = 主要修改文件。同一波次内的任务修改不同文件，无冲突。
+> ✅ = 已完成 | ✏️ = 待修改文件。同一波次内的任务修改不同文件，无冲突。
+
+---
+
+## 附录：实现进度追踪
+
+| 编号 | 需求 | 对应代码 | 状态 |
+|------|------|---------|------|
+| P1 | JSON 加载与校验 | `script/load.py` + `script/validate.py` | ✅ 已实现 |
+| P2 | 游戏窗口识别 | `runtime/window.py` | ✅ 已实现 |
+| — | 屏幕采集 | `runtime/capture.py` | ✅ 已实现 (T01) |
+| P3 | OCR 识别波次、资源 | `vision/ocr.py` | ❌ T04 |
+| P4 | 地图界面判断 | `vision/detector.py` | ❌ T05 |
+| P5 | 按 O 打开地图 | `engine/action.py` | ❌ T07 |
+| P6 | 回 origin | `engine/navigator.py` | ❌ T08 |
+| P7 | pan_to_region | `engine/navigator.py` | ❌ T08 |
+| P8 | place_trap | `engine/action.py` + `engine/slot.py` | ❌ T09+T10 |
+| P9 | upgrade_trap | `engine/action.py` | ❌ T10 |
+| P10 | 条件引擎 | `engine/condition.py` | ❌ T06 |
+| P11 | retry 机制 | `engine/retry.py` | ❌ T03+T11 |
+| P12 | 单局日志 | `engine/report.py` | ❌ T02+T12 |
+| P13 | 批量跑固定脚本 | `engine/batch.py` | ❌ T13 |
