@@ -15,15 +15,21 @@ type ProjectApi = {
     projectRoot: string,
     floorId: string
   ) => Promise<{ cancelled: true } | { cancelled: false; relativePath: string }>
-  importTrapRecognitionImage: (
-    projectRoot: string,
-    trapId: string
-  ) => Promise<{ cancelled: true } | { cancelled: false; relativePath: string }>
   readFileBase64: (
     projectRoot: string,
     relativePath: string
   ) => Promise<{ base64: string; mime: string }>
   fileExists: (projectRoot: string, relativePath: string) => Promise<{ exists: boolean }>
+}
+
+type TrapApi = {
+  listTrapDefinitions: () => Promise<{ traps: unknown[] }>
+  syncTrapDefinitions: (traps: unknown[], previousTrapIds: string[]) => Promise<{ ok: true }>
+  importTrapRecognitionImage: (
+    trapId: string
+  ) => Promise<{ cancelled: true } | { cancelled: false; relativePath: string }>
+  readFileBase64: (relativePath: string) => Promise<{ base64: string; mime: string }>
+  fileExists: (relativePath: string) => Promise<{ exists: boolean }>
 }
 
 declare global {
@@ -39,6 +45,7 @@ declare global {
       ) => Promise<{ cancelled: true } | { cancelled: false; path: string }>
     }
     projectApi: ProjectApi
+    trapApi: TrapApi
   }
 }
 

@@ -36,8 +36,8 @@ export type ProjectFileV1 = {
   floors: ProjectFloor[]
   activeFloorId?: string
   slotDefaults?: SlotDefaults
-  /** Shared trap library for all floors / export scripts in this project. */
-  traps?: TrapDefinition[]
+  /** Runtime mirror loaded from map-configurator/traps/*.json; not written to project.json. */
+  traps?: TrapLibraryEntry[]
   /** @deprecated migrated to floors[] */
   floorImageRelative?: string
 }
@@ -77,11 +77,21 @@ export type TrapRow = {
   upgrade_mode: string
 }
 
-/** Project-level trap with optional recognition template image. */
-export type TrapDefinition = TrapRow & {
-  /** Relative to project root, e.g. assets/verify_templates/trap_slow_trap.png */
+/** Editor trap library entry (persisted as map-configurator/traps/{trap_id}.json). */
+export type TrapLibraryEntry = {
+  trap_id: string
+  trap_name: string
+  cost: number
+  upgrade_cost: number
+  max_level: number
+  upgrade_mode: string
+  upgrade_hold_ms: number
+  /** Relative to map-configurator root (e.g. assets/verify_templates/trap_a.png). */
   recognitionImageRelative?: string
 }
+
+/** @deprecated use TrapLibraryEntry */
+export type TrapDefinition = TrapLibraryEntry
 
 export type SlotRow = {
   slot_id: string
