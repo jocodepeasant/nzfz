@@ -9,8 +9,9 @@
 
 ```
 ✅ T01-屏幕采集 (已完成)
+✅ T02-单局日志 (已完成)
 
-波次1 (可并行2人):  T02-单局日志  |  T03-重试框架
+波次1 (可并行2人):  ~~T02-单局日志~~  |  T03-重试框架
                                     ↓
 波次2 (可并行2人):  T04-OCR识别   |  T05-模板匹配
                                     ↓
@@ -87,14 +88,13 @@ with ScreenCapture(region={"left": rect.left, "top": rect.top, "width": rect.wid
 
 ---
 
-### T02 - 单局日志
+### ✅ T02 - 单局日志（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P12，中 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/engine/report.py` |
-| **依赖** | 无（纯数据记录模块） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-run-report/` |
 
 #### 需求描述
 
@@ -155,10 +155,10 @@ def write_report(path: Path, report: RunReport) -> None:
 
 #### 验收标准
 
-- [ ] `ActionLog` 和 `RunReport` 数据类可正常实例化和序列化
-- [ ] `write_report` 生成合法 JSON 文件，datetime 为 ISO 8601 字符串
-- [ ] `RunReport.summary()` 返回包含 total/success/fail/duration 的字典
-- [ ] 不依赖任何未实现模块
+- [x] `ActionLog` 和 `RunReport` 数据类可正常实例化和序列化
+- [x] `write_report` 生成合法 JSON 文件，datetime 为 ISO 8601 字符串
+- [x] `RunReport.summary()` 返回包含 total/success/fail/duration 的字典
+- [x] 不依赖任何未实现模块
 
 ---
 
@@ -949,7 +949,7 @@ def run_batch(script_paths: list[Path]) -> list[dict]:
 | 任务 | capture.py | ocr.py | detector.py | action.py | condition.py | navigator.py | slot.py | retry.py | report.py | batch.py | cli.py | state.py |
 |------|:---------:|:------:|:-----------:|:---------:|:------------:|:------------:|:-------:|:--------:|:---------:|:--------:|:------:|:--------:|
 | T01  | ✅ | | | | | | | | | | | |
-| T02  | | | | | | | | | ✏️ | | | |
+| T02  | | | | | | | | | ✅ | | | |
 | T03  | | | | | | | | ✏️ | | | | |
 | T04  | | ✏️ | | | | | | | | | | |
 | T05  | | | ✏️ | | | | | | | | | |
@@ -982,5 +982,5 @@ def run_batch(script_paths: list[Path]) -> list[dict]:
 | P9 | upgrade_trap | `engine/action.py` | ❌ T10 |
 | P10 | 条件引擎 | `engine/condition.py` | ❌ T06 |
 | P11 | retry 机制 | `engine/retry.py` | ❌ T03+T11 |
-| P12 | 单局日志 | `engine/report.py` | ❌ T02+T12 |
+| P12 | 单局日志 | `engine/report.py` | ✅ 已实现 (T02) |
 | P13 | 批量跑固定脚本 | `engine/batch.py` | ❌ T13 |
