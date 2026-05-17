@@ -1,11 +1,11 @@
-- [ ] CaptureConfig 数据类定义完整，含 backend / region / output_format 字段及默认值
-- [ ] CaptureBackend 枚举包含 mss 和 dxcam 两个值
-- [ ] ScreenCapture 类支持 mss 后端截图，返回 numpy ndarray (BGR, uint8)
-- [ ] ScreenCapture 类支持指定 region 裁剪截图
-- [ ] ScreenCapture 类支持 dxcam 后端（条件导入，不可用时抛 ImportError）
-- [ ] ScreenCapture 实现上下文管理器协议 (__enter__ / __exit__)
-- [ ] ScreenCapture 支持 lazy init（未 start 时 capture_frame 自动初始化）
-- [ ] ScreenCapture close 后调用 capture_frame 抛出 RuntimeError
-- [ ] runtime/__init__.py 正确导出 ScreenCapture, CaptureConfig, CaptureBackend
-- [ ] pyproject.toml 的 runtime 可选依赖包含 mss 和 numpy
-- [ ] 单元测试覆盖：默认配置、mss 截图（mock）、region 裁剪、dxcam ImportError、生命周期、lazy init、close 后保护
+- [x] CaptureConfig 数据类定义完整，含 backend / region / output_format 字段及默认值
+- [x] CaptureBackend 枚举包含 mss 和 dxcam 两个值
+- [x] ScreenCapture 类支持 mss 后端截图，返回 numpy ndarray (BGR, uint8)
+- [x] ScreenCapture 类支持指定 region 裁剪截图
+- [x] ScreenCapture 类支持 dxcam 后端（条件导入，不可用时抛 ImportError）
+- [x] ScreenCapture 实现上下文管理器协议 (__enter__ / __exit__)
+- [x] ScreenCapture 支持 lazy init（未 start 时 capture_frame 自动初始化）
+- [x] ScreenCapture close 后调用 capture_frame 抛出 RuntimeError
+- [x] runtime/__init__.py 正确导出 ScreenCapture, CaptureConfig, CaptureBackend
+- [x] pyproject.toml 的 runtime 可选依赖包含 mss 和 numpy
+- [x] 单元测试覆盖：默认配置、mss 截图（mock）、region 裁剪、dxcam ImportError、生命周期、lazy init、close 后保护
