@@ -31,6 +31,9 @@ input = [
 ocr = [
   "paddleocr>=2.8.0",
 ]
+ui = [
+  "Pillow>=10.0.0",
+]
 
 [project.scripts]
 td-executor = "td_executor.cli:main"

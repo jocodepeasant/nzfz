@@ -54,6 +54,13 @@ def run_cmd(
     console.print("[yellow]run[/yellow] 游戏内执行尚未完全实现。")
 
 
+@app.command("gui")
+def gui_cmd() -> None:
+    """Launch the visual GUI interface."""
+    from td_executor.ui.app import launch
+    launch()
+
+
 def main() -> None:
     app()
 
