@@ -20,7 +20,7 @@
                                     ↓
 波次3 (可并行2人):  ~~T06-条件引擎~~  |  ~~T07-按键动作基础~~ ✅
                                     ↓
-波次4 (可并行2人):  T08-地图导航  |  ~~T09-格子定位~~ ✅
+波次4 (可并行2人):  ~~T08-地图导航~~  |  ~~T09-格子定位~~ ✅
                                     ↓
 波次5 (串行):       T10-动作执行完整流程 → T11-重试集成 → T12-日志集成 → T13-批量执行
 ```
@@ -45,6 +45,7 @@
   - `td_executor.engine.condition` → `ConditionEngine`, `ConditionContext`, `eval_conditions`
   - `td_executor.vision.detector` → `VisionDetector`, `DetectorConfig`, `crop_roi`
   - `td_executor.engine.action` → `press_key`, `click_at`, `drag`, `ensure_map_open`, `execute_action`
+  - `td_executor.engine.navigator` → `NavigatorConfig`, `calculate_pan_endpoints`, `execute_pan_action`, `go_to_origin`, `pan_to_region`
   - `td_executor.engine.slot` → `locate_slot`, `get_micro_adjust_points`, `click_slot`
 
 ---
@@ -488,42 +489,69 @@ def execute_action(action: dict, context: dict) -> dict: ...
 
 ---
 
-### T08 - 地图导航
+### ✅ T08 - 地图导航（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P6/P7，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/engine/navigator.py` |
-| **依赖** | T07（action.py 的 drag 和 ensure_map_open） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-map-navigator/` |
 
-#### 接口定义
+#### 需求描述
+
+实现地图区域拖拽导航，通过执行 region 配置中的 `enter_actions`（一系列 `pan_map` 拖拽动作）将视野从初始位置导航到目标区域。
+
+#### 已实现接口
 
 ```python
-"""地图区域拖拽导航。"""
-
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from td_executor.runtime.window import WindowRect
 
+if TYPE_CHECKING:
+    from td_executor.runtime.capture import ScreenCapture
 
-def go_to_origin(rect: WindowRect, runtime: dict) -> bool:
-    """回到地图初始视野（关闭地图再重新打开）。"""
+
+@dataclass
+class NavigatorConfig:
+    map_close_wait_ms: int = 500
+    map_open_wait_ms: int = 800
+    wait_after_pan_ms: int = 800
 
 
-def pan_to_region(region_id: str, rect: WindowRect, regions: list[dict], runtime: dict) -> bool:
-    """导航到指定区域。"""
+def calculate_pan_endpoints(
+    rect: WindowRect, direction: str, distance_ratio: float,
+) -> tuple[tuple[int, int], tuple[int, int]] | None: ...
+
+
+def go_to_origin(
+    capture: ScreenCapture, rect: WindowRect, rois: dict,
+    runtime: dict, config: NavigatorConfig | None = None,
+) -> bool: ...
+
+
+def execute_pan_action(
+    action: dict, rect: WindowRect, config: NavigatorConfig | None = None,
+) -> bool: ...
+
+
+def pan_to_region(
+    region_id: str, rect: WindowRect, regions: list[dict],
+    capture: ScreenCapture, rois: dict, runtime: dict,
+    config: NavigatorConfig | None = None,
+) -> bool: ...
 ```
 
 #### 验收标准
 
-- [ ] `go_to_origin` 正确执行关闭→重新打开地图流程
-- [ ] `pan_to_region` 先回 origin 再执行 enter_actions
-- [ ] 拖拽方向和距离计算正确
-- [ ] `repeat` 重复拖拽正确执行
-- [ ] 每次拖拽后等待 `wait_after_pan_ms`
+- [x] `go_to_origin` 正确执行关闭→重新打开地图流程
+- [x] `pan_to_region` 先回 origin 再执行 enter_actions
+- [x] 拖拽方向和距离计算正确
+- [x] `repeat` 重复拖拽正确执行
+- [x] 每次拖拽后等待 `wait_after_pan_ms`
 
 ---
 
@@ -636,7 +664,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | T05  | | | ✅ | | | | | | | | | |
 | T06  | | | | | ✅ | | | | | | | |
 | T07  | | | | ✅ | | | | | | | | |
-| T08  | | | | | | ✏️ | | | | | | |
+| T08  | | | | | | ✅ | | | | | | |
 | T09  | | | | | | | ✅ | | | | | |
 | T10  | | | | ✏️ | | | | | | | | |
 | T11  | | | | | | | | ✏️ | | | | |
@@ -657,8 +685,8 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | P3 | OCR 识别波次、资源 | `vision/ocr.py` | ✅ 已实现 (T04) |
 | P4 | 地图界面判断 | `vision/detector.py` | ✅ 已实现 (T05) |
 | P5 | 按 O 打开地图 | `engine/action.py` | ✅ 已实现 (T07) |
-| P6 | 回 origin | `engine/navigator.py` | ❌ T08 |
-| P7 | pan_to_region | `engine/navigator.py` | ❌ T08 |
+| P6 | 回 origin | `engine/navigator.py` | ✅ 已实现 (T08) |
+| P7 | pan_to_region | `engine/navigator.py` | ✅ 已实现 (T08) |
 | P8 | place_trap | `engine/action.py` + `engine/slot.py` | ✅ slot.py 已实现 (T09)，T10 待完成 |
 | P9 | upgrade_trap | `engine/action.py` | ❌ T10 |
 | P10 | 条件引擎 | `engine/condition.py` | ✅ 已实现 (T06) |
