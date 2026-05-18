@@ -29,7 +29,7 @@ if !errorlevel! neq 0 goto :error_exit
 
 echo.
 
-if "%~1"=="" goto :show_help
+if "%~1"=="" goto :run_gui
 if "%~1"=="gui" goto :run_gui
 if "%~1"=="run" goto :run_script
 if "%~1"=="validate" goto :run_validate
