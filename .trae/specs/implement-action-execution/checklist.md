@@ -1,0 +1,21 @@
+- [x] ActionExecutor 类正确初始化 RetryManager、ConditionEngine、VisionDetector
+- [x] ActionExecutor.execute 根据 action type 正确分发
+- [x] place_trap 流程：ensure_map_open → pan_to_region → 条件判断 → press_key → click_slot → verify → retry
+- [x] place_trap 条件不满足时按 on_condition_failed 策略处理（wait/skip）
+- [x] place_trap 重试时 reset_view_fn 和 micro_adjust_fn 正确调用
+- [x] place_trap 成功后更新 state.trap_levels[trap_id] = 1
+- [x] upgrade_trap 流程：ensure_map_open → 条件判断 → press_key(hold_ms) → verify → retry
+- [x] upgrade_trap 优先使用 action.execute 参数，回退到 trap 配置
+- [x] upgrade_trap 成功后更新 state.trap_levels[trap_id] = target_level
+- [x] remove_trap 流程：ensure_map_open → pan_to_region → 条件判断 → click_slot → verify → retry
+- [x] remove_trap custom_steps 为空时默认点击格子
+- [x] remove_trap custom_steps 非空时打印 warning 并跳过
+- [x] remove_trap 成功后移除 state.trap_levels 中对应条目
+- [x] pan_to_region 流程：调用 navigator.pan_to_region，失败时重试
+- [x] verify 函数构建：slot_has_trap → is_slot_occupied
+- [x] verify 函数构建：slot_empty → is_slot_empty
+- [x] verify 函数构建：trap_level_gte → 检查 state 或 required=false 跳过
+- [x] verify 函数构建：未知类型 → warning + required 判断
+- [x] 模块级 execute_action 便捷函数正确工作
+- [x] engine/__init__.py 正确导出 ActionExecutor
+- [x] 所有测试通过（pytest tests/test_action_executor.py）

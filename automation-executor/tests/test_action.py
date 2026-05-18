@@ -213,26 +213,21 @@ class TestExecuteAction:
         result = execute_action({"type": "log"}, {})
         assert result == {"success": True, "skipped": False}
 
-    def test_place_trap_not_implemented(self) -> None:
-        result = execute_action({"type": "place_trap", "trap_id": "slow_trap"}, {})
+    def test_place_trap_map_not_open(self) -> None:
+        result = execute_action({"type": "place_trap", "trap_id": "slow_trap", "slot_id": "A01", "conditions": {}, "on_condition_failed": {"policy": "skip"}, "verify": {}, "retry": {}, "on_fail": {"policy": "skip"}}, {})
         assert result["success"] is False
-        assert result["skipped"] is False
-        assert "not implemented: place_trap" == result["error"]
 
-    def test_upgrade_trap_not_implemented(self) -> None:
-        result = execute_action({"type": "upgrade_trap"}, {})
+    def test_upgrade_trap_map_not_open(self) -> None:
+        result = execute_action({"type": "upgrade_trap", "trap_id": "slow_trap", "target_level": 2, "conditions": {}, "on_condition_failed": {"policy": "skip"}, "execute": {}, "verify": {}, "retry": {}, "on_fail": {"policy": "skip"}}, {})
         assert result["success"] is False
-        assert "not implemented: upgrade_trap" == result["error"]
 
-    def test_remove_trap_not_implemented(self) -> None:
-        result = execute_action({"type": "remove_trap"}, {})
+    def test_remove_trap_map_not_open(self) -> None:
+        result = execute_action({"type": "remove_trap", "slot_id": "A01", "conditions": {}, "on_condition_failed": {"policy": "skip"}, "execute": {}, "verify": {}, "retry": {}, "on_fail": {"policy": "skip"}}, {})
         assert result["success"] is False
-        assert "not implemented: remove_trap" == result["error"]
 
-    def test_pan_to_region_not_implemented(self) -> None:
-        result = execute_action({"type": "pan_to_region"}, {})
+    def test_pan_to_region_failure(self) -> None:
+        result = execute_action({"type": "pan_to_region", "region_id": "test", "retry": {"max_count": 0}, "on_fail": {"policy": "skip"}}, {})
         assert result["success"] is False
-        assert "not implemented: pan_to_region" == result["error"]
 
     def test_unknown_action_type(self) -> None:
         result = execute_action({"type": "unknown"}, {})

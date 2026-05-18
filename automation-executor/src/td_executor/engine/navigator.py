@@ -28,7 +28,6 @@ def calculate_pan_endpoints(
     direction: str,
     distance_ratio: float,
 ) -> tuple[tuple[int, int], tuple[int, int]] | None:
-    """根据方向和距离比例计算拖拽起止坐标。"""
     start_x = rect.left + rect.width // 2
     start_y = rect.top + rect.height // 2
 
@@ -58,7 +57,6 @@ def go_to_origin(
     runtime: dict,
     config: NavigatorConfig | None = None,
 ) -> bool:
-    """回到地图原点：若地图已打开则先关闭再重新打开，否则直接打开。"""
     if config is None:
         wait_after_pan = runtime.get("wait_after_pan_ms", 800)
         config = NavigatorConfig(wait_after_pan_ms=wait_after_pan)
@@ -90,7 +88,6 @@ def execute_pan_action(
     rect: WindowRect,
     config: NavigatorConfig | None = None,
 ) -> bool:
-    """执行单次地图拖拽动作。"""
     if config is None:
         config = NavigatorConfig()
 
@@ -117,7 +114,6 @@ def execute_pan_action(
 
 
 def _find_region(regions: list[dict], region_id: str) -> dict | None:
-    """在区域列表中查找指定 region_id 的区域。"""
     for r in regions:
         if r.get("region_id") == region_id:
             return r
@@ -133,7 +129,6 @@ def pan_to_region(
     runtime: dict,
     config: NavigatorConfig | None = None,
 ) -> bool:
-    """通过拖拽导航到指定地图区域。"""
     if not go_to_origin(capture, rect, rois, runtime, config):
         return False
 
