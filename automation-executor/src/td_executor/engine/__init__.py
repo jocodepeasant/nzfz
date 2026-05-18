@@ -1,6 +1,7 @@
 """执行引擎：条件、动作、重试、报告、批量。"""
 
 from td_executor.engine.action import (
+    ActionExecutor,
     click_at,
     drag,
     ensure_map_open,
@@ -28,6 +29,7 @@ from td_executor.engine.retry import (
 from td_executor.engine.slot import click_slot, get_micro_adjust_points, locate_slot
 
 __all__ = [
+    "ActionExecutor",
     "ActionAbortedError",
     "ActionResult",
     "ConditionContext",
