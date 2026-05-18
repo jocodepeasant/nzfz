@@ -1,5 +1,6 @@
 """执行引擎：条件、动作、重试、报告、批量。"""
 
+from td_executor.engine.condition import ConditionContext, ConditionEngine
 from td_executor.engine.retry import (
     ActionAbortedError,
     ActionResult,
@@ -14,6 +15,8 @@ from td_executor.engine.retry import (
 __all__ = [
     "ActionAbortedError",
     "ActionResult",
+    "ConditionContext",
+    "ConditionEngine",
     "OnConditionFailedConfig",
     "OnConditionFailedPolicy",
     "OnFailConfig",
