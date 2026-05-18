@@ -1,0 +1,22 @@
+- [x] UI 包结构创建完成（ui/__init__.py, events.py, executor_bridge.py）
+- [x] 事件系统定义完整（ActionStartEvent, ActionCompleteEvent, WaveChangeEvent, ExecutionDoneEvent）
+- [x] executor_bridge 实现线程安全通信（Queue + threading.Event + daemon 子线程）
+- [x] GUI 主窗口显示四个标签页和底部状态栏
+- [x] 窗口关闭时运行中弹出确认对话框
+- [x] 无显示环境时 launch() 打印错误并退出
+- [x] 监控面板动作列表正确显示（序号、类型、名称、状态、重试次数、耗时）
+- [x] 监控面板状态颜色标识正确（灰/蓝/绿/红/黄）
+- [x] 监控面板波次进度条和统计摘要实时更新
+- [x] 脚本标签页可加载、校验、预览脚本
+- [x] 脚本标签页启动/停止/重置按钮功能正常
+- [x] 脚本在子线程中执行，不阻塞 GUI
+- [x] 报告标签页可查看历史报告列表和详情
+- [x] 报告标签页可导出报告为 JSON
+- [x] 运行完成后自动保存报告到 reports/ 目录
+- [x] 画面标签页可显示游戏窗口截图
+- [x] 画面标签页执行期间自动刷新（每 2 秒）
+- [x] 画面标签页格子标注叠加显示正确
+- [x] 画面标签页 Pillow 不可用时显示降级提示
+- [x] CLI gui 命令正确启动 GUI
+- [x] pyproject.toml 新增 ui 可选依赖组
+- [x] 所有测试通过
