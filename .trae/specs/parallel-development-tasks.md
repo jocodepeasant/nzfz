@@ -22,7 +22,7 @@
                                     ↓
 波次4 (可并行2人):  ~~T08-地图导航~~  |  ~~T09-格子定位~~ ✅
                                     ↓
-波次5 (串行):       T10-动作执行完整流程 → T11-重试集成 → T12-日志集成 → T13-批量执行
+波次5 (串行):       ~~T10-动作执行完整流程~~ ✅ → T11-重试集成 → T12-日志集成 → T13-批量执行
 ```
 
 ---
@@ -585,21 +585,36 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 
 ---
 
-### T10 - 动作执行完整流程
+### ✅ T10 - 动作执行完整流程（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P8/P9，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/engine/action.py` |
 | **依赖** | T06（条件引擎）、T07（按键基础）、T08（导航）、T09（格子定位） |
+| **Spec** | `.trae/specs/implement-action-execution/` |
+
+#### 已实现接口
+
+```python
+class ActionExecutor:
+    def __init__(self, runtime_defaults=None, detector=None) -> None: ...
+    def execute(self, action: dict, context: dict) -> dict: ...
+    def _execute_place_trap(self, action, context) -> dict: ...
+    def _execute_upgrade_trap(self, action, context) -> dict: ...
+    def _execute_remove_trap(self, action, context) -> dict: ...
+    def _execute_pan_to_region(self, action, context) -> dict: ...
+    def _build_verify_fn(self, action, context) -> Callable: ...
+    def _check_conditions(self, action, context) -> dict | None: ...
+```
 
 #### 验收标准
 
-- [ ] `execute_action` 支持 `place_trap`、`upgrade_trap`、`remove_trap`、`pan_to_region`、`log` 五种 action type
-- [ ] 每种动作按流程正确执行
-- [ ] 条件不满足时按 `on_condition_failed.policy` 处理
-- [ ] 动作失败时按 `retry` 配置重试
-- [ ] 重试耗尽后按 `on_fail.policy` 处理
+- [x] `execute_action` 支持 `place_trap`、`upgrade_trap`、`remove_trap`、`pan_to_region`、`log` 五种 action type
+- [x] 每种动作按流程正确执行
+- [x] 条件不满足时按 `on_condition_failed.policy` 处理
+- [x] 动作失败时按 `retry` 配置重试
+- [x] 重试耗尽后按 `on_fail.policy` 处理
 
 ---
 
@@ -666,7 +681,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | T07  | | | | ✅ | | | | | | | | |
 | T08  | | | | | | ✅ | | | | | | |
 | T09  | | | | | | | ✅ | | | | | |
-| T10  | | | | ✏️ | | | | | | | | |
+| T10  | | | | ✅ | | | | | | | | |
 | T11  | | | | | | | | ✏️ | | | | |
 | T12  | | | | ✏️ | | | | | ✏️ | | | |
 | T13  | | | | | | | | | | ✏️ | ✏️ | |
@@ -687,8 +702,8 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | P5 | 按 O 打开地图 | `engine/action.py` | ✅ 已实现 (T07) |
 | P6 | 回 origin | `engine/navigator.py` | ✅ 已实现 (T08) |
 | P7 | pan_to_region | `engine/navigator.py` | ✅ 已实现 (T08) |
-| P8 | place_trap | `engine/action.py` + `engine/slot.py` | ✅ slot.py 已实现 (T09)，T10 待完成 |
-| P9 | upgrade_trap | `engine/action.py` | ❌ T10 |
+| P8 | place_trap | `engine/action.py` + `engine/slot.py` | ✅ 已实现 (T09+T10) |
+| P9 | upgrade_trap | `engine/action.py` | ✅ 已实现 (T10) |
 | P10 | 条件引擎 | `engine/condition.py` | ✅ 已实现 (T06) |
 | P11 | retry 机制 | `engine/retry.py` | ✅ 已实现 (T03)，T11 集成待完成 |
 | P12 | 单局日志 | `engine/report.py` | ✅ 已实现 (T02) |
