@@ -7,6 +7,7 @@ from td_executor.engine.action import (
     execute_action,
     press_key,
 )
+from td_executor.engine.condition import ConditionContext, ConditionEngine
 from td_executor.engine.retry import (
     ActionAbortedError,
     ActionResult,
@@ -21,6 +22,8 @@ from td_executor.engine.retry import (
 __all__ = [
     "ActionAbortedError",
     "ActionResult",
+    "ConditionContext",
+    "ConditionEngine",
     "OnConditionFailedConfig",
     "OnConditionFailedPolicy",
     "OnFailConfig",

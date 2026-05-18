@@ -18,7 +18,7 @@
                                     ↓
 波次2 (可并行2人):  ~~T04-OCR识别~~  |  ~~T05-模板匹配~~
                                     ↓
-波次3 (可并行2人):  T06-条件引擎  |  ~~T07-按键动作基础~~ ✅
+波次3 (可并行2人):  ~~T06-条件引擎~~  |  ~~T07-按键动作基础~~ ✅
                                     ↓
 波次4 (可并行2人):  T08-地图导航  |  T09-格子定位
                                     ↓
@@ -42,6 +42,7 @@
   - `td_executor.script.load` → `load_script_file()`
   - `td_executor.script.validate` → `validate_script_data()`
   - `td_executor.engine.retry` → `RetryManager`, `RetryConfig`, `OnConditionFailedConfig`, `OnFailConfig`, `ActionResult`, `ActionAbortedError`
+  - `td_executor.engine.condition` → `ConditionEngine`, `ConditionContext`, `eval_conditions`
   - `td_executor.vision.detector` → `VisionDetector`, `DetectorConfig`, `crop_roi`
   - `td_executor.engine.action` → `press_key`, `click_at`, `drag`, `ensure_map_open`, `execute_action`
 
@@ -367,30 +368,44 @@ class VisionDetector:
 
 ---
 
-### T06 - 条件引擎
+### ✅ T06 - 条件引擎（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P10，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/engine/condition.py` |
-| **依赖** | T04（OCR 读资源/波次）、T05（检测器判断格子状态） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-condition-engine/` |
 
 #### 需求描述
 
 实现动作执行前的条件判断引擎，解析脚本 JSON 中的 `conditions` 对象，调用 OCR 和检测器获取实时数据，判断条件是否满足。
 
-#### 接口定义
+#### 已实现接口
 
 ```python
-"""动作前置条件判断。"""
-
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from td_executor.runtime.window import WindowRect
 from td_executor.runtime.capture import ScreenCapture
+
+
+@dataclass
+class ConditionContext:
+    capture: ScreenCapture
+    rect: WindowRect
+    rois: dict
+    slots: list[dict]
+    traps: list[dict]
+    state: dict | None = None
+    multi_frame: dict | None = None
+
+
+class ConditionEngine:
+    def __init__(self, detector=None) -> None: ...
+    def eval_conditions(self, conditions: dict[str, Any] | None, ctx: ConditionContext) -> bool: ...
 
 
 def eval_conditions(
@@ -414,15 +429,27 @@ def eval_conditions(
 | `wave_gte` | 波次 >= N | OCR `read_wave` |
 | `slot_empty` | 格子为空 | 检测器 `is_slot_empty` |
 | `slot_occupied` | 格子已占用 | 检测器 `is_slot_occupied` |
-| `trap_level_lt` | 陷阱等级 < N | 检测器 + 状态缓存 |
+| `trap_level_lt` | 陷阱等级 < N | 状态缓存 |
 
 #### 验收标准
 
-- [ ] `eval_conditions` 正确解析所有条件类型
-- [ ] 短路求值，不满足时立即返回
-- [ ] OCR 结果在同一轮评估中缓存复用
-- [ ] 未知条件键不导致崩溃
-- [ ] 所有条件为空 dict 时返回 `True`
+- [x] `eval_conditions` 正确解析所有条件类型
+- [x] 短路求值，不满足时立即返回
+- [x] OCR 结果在同一轮评估中缓存复用
+- [x] 未知条件键不导致崩溃
+- [x] 所有条件为空 dict 时返回 `True`
+
+#### engine/__init__.py 新增导出
+
+```python
+from td_executor.engine.condition import ConditionContext, ConditionEngine
+
+__all__ = [
+    # ... 原有导出 ...
+    "ConditionContext",
+    "ConditionEngine",
+]
+```
 
 ---
 
@@ -622,7 +649,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | T03  | | | | | | | | ✅ | | | | |
 | T04  | | ✅ | | | | | | | | | | |
 | T05  | | | ✅ | | | | | | | | | |
-| T06  | | | | | ✏️ | | | | | | | |
+| T06  | | | | | ✅ | | | | | | | |
 | T07  | | | | ✅ | | | | | | | | |
 | T08  | | | | | | ✏️ | | | | | | |
 | T09  | | | | | | | ✏️ | | | | | |
@@ -649,7 +676,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | P7 | pan_to_region | `engine/navigator.py` | ❌ T08 |
 | P8 | place_trap | `engine/action.py` + `engine/slot.py` | ❌ T09+T10 |
 | P9 | upgrade_trap | `engine/action.py` | ❌ T10 |
-| P10 | 条件引擎 | `engine/condition.py` | ❌ T06 |
+| P10 | 条件引擎 | `engine/condition.py` | ✅ 已实现 (T06) |
 | P11 | retry 机制 | `engine/retry.py` | ✅ 已实现 (T03)，T11 集成待完成 |
 | P12 | 单局日志 | `engine/report.py` | ✅ 已实现 (T02) |
 | P13 | 批量跑固定脚本 | `engine/batch.py` | ❌ T13 |
