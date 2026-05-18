@@ -6,98 +6,94 @@ set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "PROJECT_DIR=%SCRIPT_DIR%"
 set "VENV_DIR=%PROJECT_DIR%\.venv"
-
 set "PYTHON="
+set "PY_VERSION="
+set "PKGS_INSTALLED=0"
 
-echo ═════════════════════════════════════
+echo ===================================================
 echo   TD Executor - 塔防自动化执行器
-echo ═════════════════════════════════════
+echo ===================================================
 echo.
 
 call :check_python
-if errorlevel 1 goto :error_exit
+if !errorlevel! neq 0 goto :error_exit
 
 call :setup_venv
-if errorlevel 1 goto :error_exit
+if !errorlevel! neq 0 goto :error_exit
 
 call :activate_venv
-if errorlevel 1 goto :error_exit
+if !errorlevel! neq 0 goto :error_exit
 
 call :install_deps
-if errorlevel 1 goto :error_exit
+if !errorlevel! neq 0 goto :error_exit
 
 echo.
 
-set "CMD=%~1"
-if "%CMD%"=="" set "CMD=help"
+if "%~1"=="" goto :show_help
+if "%~1"=="gui" goto :run_gui
+if "%~1"=="run" goto :run_script
+if "%~1"=="validate" goto :run_validate
+if "%~1"=="dry-run" goto :run_dry_run
+if "%~1"=="test" goto :run_tests
+if "%~1"=="help" goto :show_help
+if "%~1"=="--help" goto :show_help
+if "%~1"=="-h" goto :show_help
 
-if "%CMD%"=="gui" goto :run_gui
-if "%CMD%"=="run" goto :run_script
-if "%CMD%"=="validate" goto :run_validate
-if "%CMD%"=="dry-run" goto :run_dry_run
-if "%CMD%"=="test" goto :run_tests
-if "%CMD%"=="help" goto :show_help
-if "%CMD%"=="--help" goto :show_help
-if "%CMD%"=="-h" goto :show_help
-
-echo [ERROR] 未知命令: %CMD%
+echo [ERROR] 未知命令: %~1
 echo.
 goto :show_help
 
 :run_gui
 echo [INFO] 启动 GUI 界面...
 if not exist "%PROJECT_DIR%\reports" mkdir "%PROJECT_DIR%\reports"
-"%PYTHON%" -m td_executor gui
+python -m td_executor gui
 goto :eof
 
 :run_script
-set "SCRIPT_PATH=%~2"
-if "%SCRIPT_PATH%"=="" (
+if "%~2"=="" (
     echo [ERROR] 请指定脚本文件路径
     echo 用法: %~nx0 run ^<脚本路径^>
     goto :error_exit
 )
-if not exist "%SCRIPT_PATH%" (
-    echo [ERROR] 脚本文件不存在: %SCRIPT_PATH%
+if not exist "%~2" (
+    echo [ERROR] 脚本文件不存在: %~2
     goto :error_exit
 )
-echo [INFO] 执行脚本: %SCRIPT_PATH%
+echo [INFO] 执行脚本: %~2
 if not exist "%PROJECT_DIR%\reports" mkdir "%PROJECT_DIR%\reports"
-"%PYTHON%" -m td_executor run "%SCRIPT_PATH%"
+python -m td_executor run "%~2"
 goto :eof
 
 :run_validate
-set "SCRIPT_PATH=%~2"
-if "%SCRIPT_PATH%"=="" (
+if "%~2"=="" (
     echo [ERROR] 请指定脚本文件路径
     echo 用法: %~nx0 validate ^<脚本路径^>
     goto :error_exit
 )
-if not exist "%SCRIPT_PATH%" (
-    echo [ERROR] 脚本文件不存在: %SCRIPT_PATH%
+if not exist "%~2" (
+    echo [ERROR] 脚本文件不存在: %~2
     goto :error_exit
 )
-"%PYTHON%" -m td_executor validate "%SCRIPT_PATH%"
+python -m td_executor validate "%~2"
 goto :eof
 
 :run_dry_run
-set "SCRIPT_PATH=%~2"
-if "%SCRIPT_PATH%"=="" (
+if "%~2"=="" (
     echo [ERROR] 请指定脚本文件路径
     echo 用法: %~nx0 dry-run ^<脚本路径^>
     goto :error_exit
 )
-if not exist "%SCRIPT_PATH%" (
-    echo [ERROR] 脚本文件不存在: %SCRIPT_PATH%
+if not exist "%~2" (
+    echo [ERROR] 脚本文件不存在: %~2
     goto :error_exit
 )
-echo [INFO] 试运行: %SCRIPT_PATH%
-"%PYTHON%" -m td_executor run "%SCRIPT_PATH%" --dry-run
+echo [INFO] 试运行: %~2
+python -m td_executor run "%~2" --dry-run
 goto :eof
 
 :run_tests
 echo [INFO] 运行测试...
-"%PYTHON%" -m pytest "%PROJECT_DIR%\tests" -v
+python -m pytest "%PROJECT_DIR%\tests" -v
 goto :eof
 
 :show_help
@@ -123,12 +119,12 @@ goto :eof
 
 :check_python
 where python >nul 2>&1
-if %errorlevel%==0 (
+if !errorlevel! equ 0 (
     set "PYTHON=python"
     goto :check_version
 )
 where python3 >nul 2>&1
-if %errorlevel%==0 (
+if !errorlevel! equ 0 (
     set "PYTHON=python3"
     goto :check_version
 )
@@ -136,74 +132,74 @@ echo [ERROR] 未找到 Python，请安装 Python ^>= 3.10
 exit /b 1
 
 :check_version
-for /f "tokens=*" %%v in ('"%PYTHON%" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"') do set "PY_VERSION=%%v"
-for /f "tokens=1 delims=." %%m in ("%PY_VERSION%") do set "PY_MAJOR=%%m"
-for /f "tokens=2 delims=." %%n in ("%PY_VERSION%") do set "PY_MINOR=%%n"
+for /f "usebackq tokens=*" %%v in (`!PYTHON! -c "import sys; print(sys.version_info.major)"`) do set "PY_MAJOR=%%v"
+for /f "usebackq tokens=*" %%v in (`!PYTHON! -c "import sys; print(sys.version_info.minor)"`) do set "PY_MINOR=%%v"
+set "PY_VERSION=!PY_MAJOR!.!PY_MINOR!"
 
-if %PY_MAJOR% lss 3 (
-    echo [ERROR] Python 版本过低 ^(%PY_VERSION%^)，需要 ^>= 3.10
+if !PY_MAJOR! lss 3 (
+    echo [ERROR] Python 版本过低 ^(!PY_VERSION!^)，需要 ^>= 3.10
     exit /b 1
 )
-if %PY_MAJOR%==3 if %PY_MINOR% lss 10 (
-    echo [ERROR] Python 版本过低 ^(%PY_VERSION%^)，需要 ^>= 3.10
+if !PY_MAJOR! equ 3 if !PY_MINOR! lss 10 (
+    echo [ERROR] Python 版本过低 ^(!PY_VERSION!^)，需要 ^>= 3.10
     exit /b 1
 )
-echo [OK] Python %PY_VERSION%
+echo [OK] Python !PY_VERSION!
 exit /b 0
 
 :setup_venv
-if not exist "%VENV_DIR%" (
-    echo [INFO] 创建虚拟环境...
-    "%PYTHON%" -m venv "%VENV_DIR%"
-    if errorlevel 1 (
-        echo [ERROR] 虚拟环境创建失败
-        exit /b 1
-    )
-    echo [OK] 虚拟环境已创建: %VENV_DIR%
+if exist "%VENV_DIR%" goto :venv_exists
+echo [INFO] 创建虚拟环境...
+!PYTHON! -m venv "%VENV_DIR%"
+if !errorlevel! neq 0 (
+    echo [ERROR] 虚拟环境创建失败
+    exit /b 1
 )
+echo [OK] 虚拟环境已创建: %VENV_DIR%
+:venv_exists
 exit /b 0
 
 :activate_venv
-if exist "%VENV_DIR%\Scripts\activate.bat" (
-    call "%VENV_DIR%\Scripts\activate.bat"
-    echo [OK] 虚拟环境已激活
-    exit /b 0
+if not exist "%VENV_DIR%\Scripts\activate.bat" (
+    echo [ERROR] 虚拟环境激活失败，请检查 %VENV_DIR%
+    exit /b 1
 )
-echo [ERROR] 虚拟环境激活失败，请检查 %VENV_DIR%
-exit /b 1
+call "%VENV_DIR%\Scripts\activate.bat"
+echo [OK] 虚拟环境已激活
+exit /b 0
 
 :install_deps
 set "PKGS_INSTALLED=0"
 
-"%PYTHON%" -c "import td_executor" >nul 2>&1
-if errorlevel 1 (
+python -c "import td_executor" >nul 2>&1
+if !errorlevel! neq 0 (
     echo [INFO] 安装 td-executor（基础依赖）...
-    "%PYTHON%" -m pip install -e "%PROJECT_DIR%" -q
+    python -m pip install -e "%PROJECT_DIR%" -q
     set "PKGS_INSTALLED=1"
 )
 
-"%PYTHON%" -c "import numpy" >nul 2>&1
-if errorlevel 1 (
+python -c "import numpy" >nul 2>&1
+if !errorlevel! neq 0 (
     echo [INFO] 安装 runtime 依赖（numpy, opencv, mss）...
-    "%PYTHON%" -m pip install -e "%PROJECT_DIR%\[runtime\]" -q
+    python -m pip install -e "%PROJECT_DIR%" -q
     set "PKGS_INSTALLED=1"
 )
 
-"%PYTHON%" -c "import pynput" >nul 2>&1
-if errorlevel 1 (
+python -c "import pynput" >nul 2>&1
+if !errorlevel! neq 0 (
     echo [INFO] 安装 input 依赖（pynput, pyautogui）...
-    "%PYTHON%" -m pip install -e "%PROJECT_DIR%\[input\]" -q
+    python -m pip install -e "%PROJECT_DIR%" -q
     set "PKGS_INSTALLED=1"
 )
 
-"%PYTHON%" -c "import PIL" >nul 2>&1
-if errorlevel 1 (
+python -c "import PIL" >nul 2>&1
+if !errorlevel! neq 0 (
     echo [INFO] 安装 ui 依赖（Pillow）...
-    "%PYTHON%" -m pip install -e "%PROJECT_DIR%\[ui\]" -q
+    python -m pip install -e "%PROJECT_DIR%" -q
     set "PKGS_INSTALLED=1"
 )
 
-if "%PKGS_INSTALLED%"=="1" (
+if "!PKGS_INSTALLED!"=="1" (
     echo [OK] 依赖安装完成
 ) else (
     echo [OK] 所有依赖已就绪
