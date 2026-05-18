@@ -25,6 +25,7 @@ from td_executor.engine.retry import (
     RetryConfig,
     RetryManager,
 )
+from td_executor.engine.slot import click_slot, get_micro_adjust_points, locate_slot
 
 __all__ = [
     "ActionAbortedError",
@@ -40,11 +41,14 @@ __all__ = [
     "RetryManager",
     "calculate_pan_endpoints",
     "click_at",
+    "click_slot",
     "drag",
     "ensure_map_open",
     "execute_action",
     "execute_pan_action",
+    "get_micro_adjust_points",
     "go_to_origin",
+    "locate_slot",
     "pan_to_region",
     "press_key",
 ]
