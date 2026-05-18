@@ -1,5 +1,12 @@
 """执行引擎：条件、动作、重试、报告、批量。"""
 
+from td_executor.engine.action import (
+    click_at,
+    drag,
+    ensure_map_open,
+    execute_action,
+    press_key,
+)
 from td_executor.engine.condition import ConditionContext, ConditionEngine
 from td_executor.engine.retry import (
     ActionAbortedError,
@@ -23,4 +30,9 @@ __all__ = [
     "OnFailPolicy",
     "RetryConfig",
     "RetryManager",
+    "click_at",
+    "drag",
+    "ensure_map_open",
+    "execute_action",
+    "press_key",
 ]
