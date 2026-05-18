@@ -1,0 +1,14 @@
+- [x] ConditionContext 数据类包含 capture、rect、rois、slots、traps、state、multi_frame 字段
+- [x] ConditionEngine 类可接收 VisionDetector 实例（可选依赖）
+- [x] eval_conditions 方法正确解析所有 6 种条件类型（resource_gte、wave_eq、wave_gte、slot_empty、slot_occupied、trap_level_lt）
+- [x] 短路求值：条件不满足时立即返回 False，不再评估后续条件
+- [x] OCR 结果在同一轮评估中缓存复用（read_wave 和 read_resource 只调用一次）
+- [x] 未知条件键打印 warning 日志，不崩溃，跳过该键继续评估
+- [x] 条件为空 dict 或 None 时返回 True
+- [x] resource_gte 条件：OCR 返回 None 时返回 False（保守策略）
+- [x] wave_eq/wave_gte 条件：OCR 返回 None 时返回 False
+- [x] slot_empty/slot_occupied 条件：根据 slot_id 查找 slot 的 verify 配置调用检测器
+- [x] trap_level_lt 条件：state 中无数据时返回 True（不阻塞动作执行）
+- [x] 模块级 eval_conditions 便捷函数正确委托给 ConditionEngine
+- [x] engine/__init__.py 新增导出 ConditionEngine 和 ConditionContext
+- [x] 单元测试覆盖所有条件类型、边界情况、缓存复用、短路求值、降级策略
