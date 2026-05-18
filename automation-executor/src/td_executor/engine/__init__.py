@@ -8,6 +8,13 @@ from td_executor.engine.action import (
     press_key,
 )
 from td_executor.engine.condition import ConditionContext, ConditionEngine
+from td_executor.engine.navigator import (
+    NavigatorConfig,
+    calculate_pan_endpoints,
+    execute_pan_action,
+    go_to_origin,
+    pan_to_region,
+)
 from td_executor.engine.retry import (
     ActionAbortedError,
     ActionResult,
@@ -24,15 +31,20 @@ __all__ = [
     "ActionResult",
     "ConditionContext",
     "ConditionEngine",
+    "NavigatorConfig",
     "OnConditionFailedConfig",
     "OnConditionFailedPolicy",
     "OnFailConfig",
     "OnFailPolicy",
     "RetryConfig",
     "RetryManager",
+    "calculate_pan_endpoints",
     "click_at",
     "drag",
     "ensure_map_open",
     "execute_action",
+    "execute_pan_action",
+    "go_to_origin",
+    "pan_to_region",
     "press_key",
 ]
