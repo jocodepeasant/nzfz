@@ -169,41 +169,19 @@ echo [OK] 虚拟环境已激活
 exit /b 0
 
 :install_deps
-set "PKGS_INSTALLED=0"
-
-python -c "import td_executor" >nul 2>&1
-if !errorlevel! neq 0 (
-    echo [INFO] 安装 td-executor（基础依赖）...
-    python -m pip install -e "%PROJECT_DIR%" -q
-    set "PKGS_INSTALLED=1"
-)
-
-python -c "import numpy" >nul 2>&1
-if !errorlevel! neq 0 (
-    echo [INFO] 安装 runtime 依赖（numpy, opencv, mss）...
-    python -m pip install -e "%PROJECT_DIR%" -q
-    set "PKGS_INSTALLED=1"
-)
-
-python -c "import pynput" >nul 2>&1
-if !errorlevel! neq 0 (
-    echo [INFO] 安装 input 依赖（pynput, pyautogui）...
-    python -m pip install -e "%PROJECT_DIR%" -q
-    set "PKGS_INSTALLED=1"
-)
-
-python -c "import PIL" >nul 2>&1
-if !errorlevel! neq 0 (
-    echo [INFO] 安装 ui 依赖（Pillow）...
-    python -m pip install -e "%PROJECT_DIR%" -q
-    set "PKGS_INSTALLED=1"
-)
-
-if "!PKGS_INSTALLED!"=="1" (
-    echo [OK] 依赖安装完成
-) else (
+python -c "import td_executor, numpy, pynput, PIL" >nul 2>&1
+if !errorlevel! equ 0 (
     echo [OK] 所有依赖已就绪
+    exit /b 0
 )
+
+echo [INFO] 安装依赖（基础 + runtime + input + ui）...
+python -m pip install -e "%PROJECT_DIR%[runtime,input,ui]" -q
+if !errorlevel! neq 0 (
+    echo [WARN] 完整依赖安装失败，尝试仅安装基础依赖...
+    python -m pip install -e "%PROJECT_DIR%" -q
+)
+echo [OK] 依赖安装完成
 exit /b 0
 
 :error_exit
