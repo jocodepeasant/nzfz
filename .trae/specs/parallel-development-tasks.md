@@ -18,7 +18,7 @@
                                     ↓
 波次2 (可并行2人):  ~~T04-OCR识别~~  |  ~~T05-模板匹配~~
                                     ↓
-波次3 (可并行2人):  T06-条件引擎  |  T07-按键动作基础
+波次3 (可并行2人):  T06-条件引擎  |  ~~T07-按键动作基础~~ ✅
                                     ↓
 波次4 (可并行2人):  T08-地图导航  |  T09-格子定位
                                     ↓
@@ -43,6 +43,7 @@
   - `td_executor.script.validate` → `validate_script_data()`
   - `td_executor.engine.retry` → `RetryManager`, `RetryConfig`, `OnConditionFailedConfig`, `OnFailConfig`, `ActionResult`, `ActionAbortedError`
   - `td_executor.vision.detector` → `VisionDetector`, `DetectorConfig`, `crop_roi`
+  - `td_executor.engine.action` → `press_key`, `click_at`, `drag`, `ensure_map_open`, `execute_action`
 
 ---
 
@@ -425,57 +426,33 @@ def eval_conditions(
 
 ---
 
-### T07 - 按键动作基础
+### ✅ T07 - 按键动作基础（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P5/P8/P9 的基础，高 |
+| **状态** | ✅ 已完成 |
 | **修改文件** | `automation-executor/src/td_executor/engine/action.py` |
 | **依赖** | T05（检测器判断地图界面状态） |
-| **与其他任务冲突** | 无，独立文件 |
+| **Spec** | `.trae/specs/implement-key-action-basics/` |
 
-#### 需求描述
-
-实现基础的按键模拟和鼠标操作功能，包括按键点击、长按、鼠标点击、拖拽等原子操作。
-
-#### 接口定义
+#### 已实现接口
 
 ```python
-"""放置 / 升级 / 拆除等动作执行。"""
-
-from __future__ import annotations
-
-from typing import Any
-
-
-def press_key(key: str, hold_ms: int = 0) -> None:
-    """按下并释放按键。hold_ms > 0 时为长按。"""
-
-
-def click_at(x: int, y: int, button: str = "left") -> None:
-    """在屏幕绝对坐标处点击。"""
-
-
-def drag(from_x: int, from_y: int, to_x: int, to_y: int, duration_ms: int = 600) -> None:
-    """从一点拖拽到另一点。"""
-
-
-def ensure_map_open(capture: Any, rect: Any, rois: dict) -> bool:
-    """确保地图界面已打开，未打开则按 O 键打开。"""
-
-
-def execute_action(action: dict, context: dict) -> dict:
-    """执行单个波次动作（调度入口）。"""
+def press_key(key: str, hold_ms: int = 0) -> None: ...
+def click_at(x: int, y: int, button: str = "left") -> None: ...
+def drag(from_x: int, from_y: int, to_x: int, to_y: int, duration_ms: int = 600) -> None: ...
+def ensure_map_open(capture: Any, rect: Any, rois: dict) -> bool: ...
+def execute_action(action: dict, context: dict) -> dict: ...
 ```
 
 #### 验收标准
 
-- [ ] `press_key` 可模拟按键点击和长按
-- [ ] `click_at` 可在指定坐标点击
-- [ ] `drag` 可模拟拖拽操作
-- [ ] `ensure_map_open` 正确判断地图界面状态并按 O 打开
-- [ ] `execute_action` 对 `type="log"` 正确处理
-- [ ] pynput/pyautogui 不可用时优雅降级
+- [x] `press_key` 可模拟按键点击和长按
+- [x] `click_at` 可在指定坐标点击
+- [x] `drag` 可模拟拖拽操作
+- [x] `ensure_map_open` 正确判断地图界面状态并按 O 打开
+- [x] `execute_action` 对 `type="log"` 正确处理
+- [x] pynput/pyautogui 不可用时优雅降级
 
 ---
 
@@ -646,7 +623,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | T04  | | ✅ | | | | | | | | | | |
 | T05  | | | ✅ | | | | | | | | | |
 | T06  | | | | | ✏️ | | | | | | | |
-| T07  | | | | ✏️ | | | | | | | | |
+| T07  | | | | ✅ | | | | | | | | |
 | T08  | | | | | | ✏️ | | | | | | |
 | T09  | | | | | | | ✏️ | | | | | |
 | T10  | | | | ✏️ | | | | | | | | |
@@ -667,7 +644,7 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
 | — | 屏幕采集 | `runtime/capture.py` | ✅ 已实现 (T01) |
 | P3 | OCR 识别波次、资源 | `vision/ocr.py` | ✅ 已实现 (T04) |
 | P4 | 地图界面判断 | `vision/detector.py` | ✅ 已实现 (T05) |
-| P5 | 按 O 打开地图 | `engine/action.py` | ❌ T07 |
+| P5 | 按 O 打开地图 | `engine/action.py` | ✅ 已实现 (T07) |
 | P6 | 回 origin | `engine/navigator.py` | ❌ T08 |
 | P7 | pan_to_region | `engine/navigator.py` | ❌ T08 |
 | P8 | place_trap | `engine/action.py` + `engine/slot.py` | ❌ T09+T10 |
