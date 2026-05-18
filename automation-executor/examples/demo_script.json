@@ -1,0 +1,156 @@
+{
+  "schema_version": "1.0.0",
+  "script_id": "demo_script_01",
+  "script_name": "演示脚本",
+  "game_mode": "tower_defense",
+  "map": {
+    "map_id": "map_01",
+    "map_name": "沙漠防线",
+    "difficulty": "normal",
+    "strategy_id": "strategy_01",
+    "base_resolution": { "width": 1920, "height": 1080 },
+    "coordinate_mode": "region_screen_ratio",
+    "initial_view": { "type": "origin", "origin_region_id": "origin" }
+  },
+  "runtime": {
+    "max_run_minutes": 30,
+    "default_action_timeout_ms": 5000,
+    "default_retry_count": 3,
+    "default_resource_policy": "wait",
+    "default_wait_resource_timeout_ms": 30000,
+    "wait_after_pan_ms": 800,
+    "wait_after_place_ms": 500,
+    "wait_after_remove_ms": 500,
+    "wait_after_upgrade_ms": 500,
+    "reset_view_on_retry": true
+  },
+  "recognition": {
+    "rois": {
+      "map_ui_indicator": { "x_ratio": 0.0, "y_ratio": 0.0, "w_ratio": 0.1, "h_ratio": 0.05 },
+      "resource_display": { "x_ratio": 0.85, "y_ratio": 0.02, "w_ratio": 0.12, "h_ratio": 0.04 },
+      "wave_display": { "x_ratio": 0.45, "y_ratio": 0.02, "w_ratio": 0.1, "h_ratio": 0.04 },
+      "place_error_tip": { "x_ratio": 0.3, "y_ratio": 0.4, "w_ratio": 0.4, "h_ratio": 0.1 }
+    },
+    "multi_frame": {
+      "default": 3
+    }
+  },
+  "traps": [
+    {
+      "trap_id": "damage_trap",
+      "trap_name": "伤害陷阱",
+      "select_key": "1",
+      "upgrade_key": "u",
+      "upgrade_hold_ms": 500,
+      "cost": 100,
+      "upgrade_cost": 150,
+      "max_level": 3,
+      "upgrade_mode": "hold"
+    },
+    {
+      "trap_id": "slow_trap",
+      "trap_name": "减速陷阱",
+      "select_key": "2",
+      "upgrade_key": "u",
+      "upgrade_hold_ms": 500,
+      "cost": 80,
+      "upgrade_cost": 120,
+      "max_level": 3,
+      "upgrade_mode": "hold"
+    }
+  ],
+  "regions": [
+    {
+      "region_id": "origin",
+      "name": "初始区域",
+      "description": "地图初始视野",
+      "enter_actions": []
+    },
+    {
+      "region_id": "region_a",
+      "name": "A区",
+      "description": "左侧区域",
+      "enter_actions": [
+        {
+          "type": "pan_map",
+          "direction": "left",
+          "distance_ratio": 0.3,
+          "duration_ms": 600,
+          "repeat": 1
+        }
+      ]
+    }
+  ],
+  "slots": [
+    {
+      "slot_id": "A01",
+      "name": "A01格",
+      "region_id": "origin",
+      "position": { "x_ratio": 0.3, "y_ratio": 0.5 },
+      "precision": { "micro_adjust_px": 5 },
+      "slot_type": "ground",
+      "default_trap": "damage_trap",
+      "verify": {
+        "check_area": { "x_ratio": 0.28, "y_ratio": 0.48, "w_ratio": 0.04, "h_ratio": 0.04 }
+      }
+    },
+    {
+      "slot_id": "A02",
+      "name": "A02格",
+      "region_id": "region_a",
+      "position": { "x_ratio": 0.25, "y_ratio": 0.45 },
+      "precision": { "micro_adjust_px": 5 },
+      "slot_type": "ground",
+      "default_trap": "slow_trap",
+      "verify": {
+        "check_area": { "x_ratio": 0.23, "y_ratio": 0.43, "w_ratio": 0.04, "h_ratio": 0.04 }
+      }
+    }
+  ],
+  "waves": [
+    {
+      "wave": 0,
+      "name": "准备阶段",
+      "execute_once": true,
+      "trigger": { "type": "manual" },
+      "actions": [
+        {
+          "type": "pan_to_region",
+          "region_id": "origin"
+        },
+        {
+          "type": "place_trap",
+          "trap_id": "damage_trap",
+          "slot_id": "A01",
+          "conditions": { "resource_gte": 100 },
+          "on_condition_failed": { "policy": "wait", "timeout_ms": 30000 },
+          "verify": {},
+          "retry": { "max_count": 2, "interval_ms": 1000 },
+          "on_fail": { "policy": "skip" }
+        }
+      ]
+    },
+    {
+      "wave": 1,
+      "name": "第一波",
+      "execute_once": true,
+      "trigger": { "type": "wave_start", "value": 1 },
+      "actions": [
+        {
+          "type": "pan_to_region",
+          "region_id": "region_a"
+        },
+        {
+          "type": "place_trap",
+          "trap_id": "slow_trap",
+          "slot_id": "A02",
+          "conditions": { "resource_gte": 80 },
+          "on_condition_failed": { "policy": "wait", "timeout_ms": 30000 },
+          "verify": {},
+          "retry": { "max_count": 2, "interval_ms": 1000 },
+          "on_fail": { "policy": "skip" }
+        }
+      ]
+    }
+  ]
+}
