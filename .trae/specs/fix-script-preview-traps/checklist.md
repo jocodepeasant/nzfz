@@ -1,0 +1,3 @@
+- [x] traps 为 dict 列表时预览不崩溃，正确提取 trap_name/trap_id 显示
+- [x] traps 为 str 列表时保持原有行为
+- [x] traps 为空列表时显示"无"

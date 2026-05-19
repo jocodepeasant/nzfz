@@ -56,6 +56,11 @@ class ScriptTab(ttk.Frame):
             side=tk.LEFT, padx=5, pady=5
         )
 
+        self._debug_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(param_frame, text="调试模式", variable=self._debug_var).pack(
+            side=tk.LEFT, padx=5, pady=5
+        )
+
         ctrl_frame = ttk.Frame(self)
         ctrl_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -112,7 +117,16 @@ class ScriptTab(ttk.Frame):
         wave_count = len(waves)
         total_actions = sum(len(w.get("actions", [])) for w in waves)
         traps = data.get("traps", [])
-        trap_list = ", ".join(traps) if traps else "无"
+        if not traps:
+            trap_list = "无"
+        else:
+            trap_names = []
+            for t in traps:
+                if isinstance(t, dict):
+                    trap_names.append(t.get("trap_name") or t.get("trap_id") or str(t))
+                else:
+                    trap_names.append(str(t))
+            trap_list = ", ".join(trap_names)
         summary = (
             f"地图: {map_name}\n"
             f"波次: {wave_count}\n"
@@ -163,11 +177,13 @@ class ScriptTab(ttk.Frame):
             self.app.bridge.start_execution(
                 self._script_data, title_keyword, dry_run,
                 window_rect=self.app.window_rect,
+                debug=self._debug_var.get(),
                 on_done=self._on_run_done,
             )
         except Exception as e:
             messagebox.showerror("启动失败", str(e))
             return
+        self.app.bridge.set_overlay(self.app.overlay if self._debug_var.get() else None)
         self._start_btn.config(state=tk.DISABLED)
         self._stop_btn.config(state=tk.NORMAL)
         self._connect_btn.config(state=tk.DISABLED)

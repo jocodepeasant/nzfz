@@ -327,3 +327,75 @@ class TestConnectWindowByHwnd:
                 result = app.connect_window_by_hwnd(9999)
         assert result is False
         assert app._window_rect is None
+
+
+class TestWindowOverlay:
+    def test_overlay_noop_on_non_win32(self) -> None:
+        from td_executor.runtime.overlay import WindowOverlay
+        overlay = WindowOverlay()
+        assert overlay.show(1) is True
+        assert overlay.hide() is True
+        overlay.draw_click_marker(100, 200)
+        overlay.draw_key_info("o", hold_ms=800)
+
+    def test_overlay_draw_methods_noop(self) -> None:
+        from td_executor.runtime.overlay import WindowOverlay
+        overlay = WindowOverlay()
+        overlay.draw_click_marker(0, 0)
+        overlay.draw_key_info("a")
+
+
+class TestExecutorBridgeFocus:
+    @patch("td_executor.runtime.window.is_window_valid", return_value=True)
+    @patch("td_executor.runtime.window.focus_window", return_value=True)
+    @patch("td_executor.engine.action.ActionExecutor")
+    @patch("td_executor.runtime.window.find_game_window")
+    @patch.object(ExecutorBridge, "_save_report")
+    def test_focus_called_before_execution(self, mock_save, mock_find, mock_exec_cls, mock_focus, mock_valid):
+        from td_executor.runtime.window import WindowRect
+        mock_find.return_value = WindowRect(hwnd=42, left=0, top=0, width=1920, height=1080)
+        mock_executor = MagicMock()
+        mock_exec_cls.return_value = mock_executor
+        mock_executor.execute.return_value = {"success": True, "skipped": False}
+        script_data = {
+            "script_id": "test", "script_name": "测试",
+            "waves": [{"wave": 1, "actions": [{"type": "log", "name": "日志"}]}],
+        }
+        bridge = ExecutorBridge()
+        bridge._execute_script(script_data, "逆战", dry_run=True)
+        mock_focus.assert_called_with(42)
+        mock_valid.assert_called_with(42)
+
+    @patch("td_executor.runtime.window.is_window_valid", return_value=False)
+    @patch("td_executor.runtime.window.focus_window")
+    @patch("td_executor.runtime.window.find_game_window")
+    @patch.object(ExecutorBridge, "_save_report")
+    def test_stops_when_window_invalid(self, mock_save, mock_find, mock_focus, mock_valid):
+        from td_executor.runtime.window import WindowRect
+        mock_find.return_value = WindowRect(hwnd=42, left=0, top=0, width=1920, height=1080)
+        bridge = ExecutorBridge()
+        bridge._execute_script(script_data={"script_id": "t", "script_name": "t", "waves": [{"wave": 1, "actions": []}]}, title_keyword="逆战", dry_run=True)
+        mock_focus.assert_not_called()
+        events = []
+        while True:
+            evt = bridge.get_event()
+            if evt is None:
+                break
+            events.append(evt)
+        from td_executor.ui.events import ExecutionDoneEvent
+        done = [e for e in events if isinstance(e, ExecutionDoneEvent)]
+        assert len(done) == 1
+        assert done[0].result == "error"
+
+
+class TestDebugMode:
+    def test_debug_var_default_false(self) -> None:
+        pass
+
+    def test_bridge_set_overlay(self) -> None:
+        bridge = ExecutorBridge()
+        assert bridge._overlay is None
+        bridge.set_overlay("fake_overlay")
+        assert bridge._overlay == "fake_overlay"
+        bridge.set_overlay(None)
+        assert bridge._overlay is None

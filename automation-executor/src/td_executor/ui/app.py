@@ -19,6 +19,7 @@ class ExecutorApp(tk.Tk):
         self.bridge = ExecutorBridge()
         self._poll_id: str | None = None
         self._window_rect = None
+        self._overlay = None
 
         self._build_ui()
         self._start_status_clock()
@@ -82,6 +83,10 @@ class ExecutorApp(tk.Tk):
     def window_rect(self):
         return self._window_rect
 
+    @property
+    def overlay(self):
+        return self._overlay
+
     def connect_window(self, title_keyword: str) -> bool:
         from td_executor.runtime.window import find_game_window
 
@@ -95,6 +100,9 @@ class ExecutorApp(tk.Tk):
             info = f"{rect.title} ({info})"
         self.set_window_info(info)
         self.preview_tab.set_window_rect(rect)
+        from td_executor.runtime.overlay import WindowOverlay
+        self._overlay = WindowOverlay()
+        self._overlay.show(rect.hwnd)
         self.focus_force()
         return True
 
@@ -111,10 +119,16 @@ class ExecutorApp(tk.Tk):
             info = f"{rect.title} ({info})"
         self.set_window_info(info)
         self.preview_tab.set_window_rect(rect)
+        from td_executor.runtime.overlay import WindowOverlay
+        self._overlay = WindowOverlay()
+        self._overlay.show(rect.hwnd)
         self.focus_force()
         return True
 
     def disconnect_window(self) -> None:
+        if self._overlay is not None:
+            self._overlay.hide()
+            self._overlay = None
         self._window_rect = None
         self.set_window_info("未连接")
         self.preview_tab.set_window_rect(None)
