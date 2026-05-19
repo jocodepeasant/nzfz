@@ -104,8 +104,8 @@ class VisionDetector:
 
     def is_map_ui_open(self, capture: ScreenCapture, rect: WindowRect, rois: dict) -> bool:
         if "map_ui_indicator" not in rois:
-            logger.warning("rois 中缺少 map_ui_indicator")
-            return False
+            logger.info("rois 中缺少 map_ui_indicator，跳过地图 UI 检测，默认已打开")
+            return True
         template_path = str(Path(self._config.templates_dir) / "map_ui_indicator.png")
         return self.match_template(capture, rect, rois["map_ui_indicator"], template_path)
 
@@ -125,7 +125,7 @@ class VisionDetector:
 
     def detect_error_tip(self, capture: ScreenCapture, rect: WindowRect, rois: dict) -> bool:
         if "place_error_tip" not in rois:
-            logger.warning("rois 中缺少 place_error_tip")
+            logger.info("rois 中缺少 place_error_tip，跳过错误提示检测")
             return False
         template_path = str(Path(self._config.templates_dir) / "place_error_tip.png")
         return self.match_template(capture, rect, rois["place_error_tip"], template_path)

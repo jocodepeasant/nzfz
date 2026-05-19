@@ -140,8 +140,8 @@ class TestExecutePlaceTrap:
         }
         result = self.executor.execute(action, ctx)
         assert result["success"] is True
-        mock_press.assert_called_with("1", overlay=None)
-        mock_click.assert_called_with("A01", ctx["rect"], ctx["slots"], overlay=None)
+        mock_press.assert_called_with("1", overlay=None, hwnd=1)
+        mock_click.assert_called_with("A01", ctx["rect"], ctx["slots"], overlay=None, hwnd=1)
 
     @patch("td_executor.engine.action.ensure_map_open", return_value=False)
     def test_map_not_open(self, mock_map) -> None:
@@ -231,7 +231,7 @@ class TestExecuteUpgradeTrap:
         }
         result = self.executor.execute(action, ctx)
         assert result["success"] is True
-        mock_press.assert_called_with("2", hold_ms=4000, overlay=None)
+        mock_press.assert_called_with("2", hold_ms=4000, overlay=None, hwnd=1)
         assert ctx["state"]["trap_levels"]["damage_trap"] == 2
 
     @patch("td_executor.engine.action.time.sleep")
@@ -252,7 +252,7 @@ class TestExecuteUpgradeTrap:
         }
         result = self.executor.execute(action, ctx)
         assert result["success"] is True
-        mock_press.assert_called_with("1", hold_ms=4000, overlay=None)
+        mock_press.assert_called_with("1", hold_ms=4000, overlay=None, hwnd=1)
 
     @patch("td_executor.engine.action.ensure_map_open", return_value=True)
     def test_condition_skip(self, mock_map) -> None:
@@ -300,7 +300,7 @@ class TestExecuteRemoveTrap:
         }
         result = self.executor.execute(action, ctx)
         assert result["success"] is True
-        mock_click.assert_called_with("A01", ctx["rect"], ctx["slots"], overlay=None)
+        mock_click.assert_called_with("A01", ctx["rect"], ctx["slots"], overlay=None, hwnd=1)
 
     @patch("td_executor.engine.action.ensure_map_open", return_value=True)
     @patch("td_executor.engine.slot.locate_slot")

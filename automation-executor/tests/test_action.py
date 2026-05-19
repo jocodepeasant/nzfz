@@ -164,9 +164,11 @@ class TestEnsureMapOpen:
         mock_detector = MagicMock()
         mock_detector.is_map_ui_open.side_effect = [False, True]
         mock_detector_cls.return_value = mock_detector
-        result = ensure_map_open(MagicMock(), MagicMock(), {})
+        mock_rect = MagicMock()
+        mock_rect.hwnd = 0
+        result = ensure_map_open(MagicMock(), mock_rect, {})
         assert result is True
-        mock_press.assert_called_once_with("o", overlay=None)
+        mock_press.assert_called_once_with("o", overlay=None, hwnd=0)
 
     @patch("td_executor.engine.action.press_key")
     @patch("td_executor.engine.action.time.sleep")
