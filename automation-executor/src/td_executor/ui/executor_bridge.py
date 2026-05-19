@@ -55,6 +55,7 @@ class ExecutorBridge:
         script_data: dict,
         title_keyword: str = "逆战",
         dry_run: bool = False,
+        window_rect: Any | None = None,
         on_done: Callable[[], None] | None = None,
     ) -> bool:
         if self._running:
@@ -64,7 +65,7 @@ class ExecutorBridge:
 
         def _run():
             try:
-                self._execute_script(script_data, title_keyword, dry_run)
+                self._execute_script(script_data, title_keyword, dry_run, window_rect)
             except Exception:
                 logger.exception("Executor thread error")
             finally:
@@ -76,7 +77,7 @@ class ExecutorBridge:
         self._thread.start()
         return True
 
-    def _execute_script(self, script_data: dict, title_keyword: str, dry_run: bool) -> None:
+    def _execute_script(self, script_data: dict, title_keyword: str, dry_run: bool, window_rect: Any | None = None) -> None:
         from td_executor.engine.action import ActionExecutor
         from td_executor.engine.report import ActionLog, RunReport
         from td_executor.runtime.capture import ScreenCapture
@@ -94,7 +95,7 @@ class ExecutorBridge:
         rois = script_data.get("rois", {})
         runtime = script_data.get("runtime", {})
 
-        rect = find_game_window(title_keyword)
+        rect = window_rect or find_game_window(title_keyword)
         if rect is None:
             self._event_queue.put(ExecutionDoneEvent(result="error"))
             return

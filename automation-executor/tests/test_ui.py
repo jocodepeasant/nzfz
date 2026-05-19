@@ -226,6 +226,40 @@ class TestExecutorBridge:
         assert len(done_events) == 1
         assert done_events[0].result == "stopped"
 
+    @patch("td_executor.engine.action.ActionExecutor")
+    @patch("td_executor.runtime.window.find_game_window")
+    @patch.object(ExecutorBridge, "_save_report")
+    def test_execute_script_with_window_rect(self, mock_save: MagicMock, mock_find: MagicMock, mock_exec_cls: MagicMock) -> None:
+        from td_executor.runtime.window import WindowRect
+        rect = WindowRect(hwnd=99, left=100, top=200, width=800, height=600)
+        mock_executor = MagicMock()
+        mock_exec_cls.return_value = mock_executor
+
+        script_data = {
+            "script_id": "test",
+            "script_name": "测试脚本",
+            "waves": [
+                {"wave": 1, "actions": [
+                    {"type": "log", "name": "测试"},
+                ]},
+            ],
+        }
+        bridge = ExecutorBridge()
+        bridge._execute_script(script_data, "逆战", dry_run=True, window_rect=rect)
+
+        mock_find.assert_not_called()
+
+        events = []
+        while True:
+            evt = bridge.get_event()
+            if evt is None:
+                break
+            events.append(evt)
+
+        done_events = [e for e in events if isinstance(e, ExecutionDoneEvent)]
+        assert len(done_events) == 1
+        assert done_events[0].result == "completed"
+
 
 class TestCLIGuiCommand:
     @patch("td_executor.ui.app.launch")
