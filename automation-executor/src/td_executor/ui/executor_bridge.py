@@ -105,11 +105,10 @@ class ExecutorBridge:
             self._event_queue.put(ExecutionDoneEvent(result="error"))
             return
 
-        from td_executor.runtime.window import focus_window, is_window_valid
+        from td_executor.runtime.window import is_window_valid
         if not is_window_valid(rect.hwnd):
             self._event_queue.put(ExecutionDoneEvent(result="error"))
             return
-        focus_window(rect.hwnd)
 
         capture = None
         try:

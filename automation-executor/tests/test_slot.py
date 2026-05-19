@@ -155,7 +155,7 @@ class TestClickSlot:
         assert result is True
         expected_x = int(1920 * 0.452)
         expected_y = int(1080 * 0.561)
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
     @patch("td_executor.engine.slot.click_at")
     def test_micro_adjust_first_call(self, mock_click: MagicMock) -> None:
@@ -165,7 +165,7 @@ class TestClickSlot:
         assert result is True
         expected_x = int(1920 * 0.452)
         expected_y = int(1080 * 0.561)
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
     @patch("td_executor.engine.slot.click_at")
     def test_micro_adjust_second_call(self, mock_click: MagicMock) -> None:
@@ -177,7 +177,7 @@ class TestClickSlot:
         assert result is True
         expected_x = int(1920 * 0.452)
         expected_y = int(1080 * 0.561) - 4
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
     @patch("td_executor.engine.slot.click_at")
     def test_micro_adjust_index_cycles(self, mock_click: MagicMock) -> None:
@@ -190,7 +190,7 @@ class TestClickSlot:
         assert result is True
         expected_x = int(1920 * 0.452)
         expected_y = int(1080 * 0.561)
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
     @patch("td_executor.engine.slot.click_at")
     def test_micro_adjust_different_slots(self, mock_click: MagicMock) -> None:
@@ -202,7 +202,7 @@ class TestClickSlot:
         assert result is True
         expected_x = int(1920 * 0.502)
         expected_y = int(1080 * 0.561)
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
     def test_slot_not_found(self) -> None:
         rect = _make_rect()
@@ -225,7 +225,7 @@ class TestClickSlot:
         assert result is True
         expected_x = int(1920 * 0.502)
         expected_y = int(1080 * 0.561)
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
     @patch("td_executor.engine.slot.click_at")
     def test_normal_mode_does_not_affect_index(self, mock_click: MagicMock) -> None:
@@ -237,7 +237,7 @@ class TestClickSlot:
         click_slot("A01", rect, slots, micro_adjust=True)
         expected_x = int(1920 * 0.452)
         expected_y = int(1080 * 0.561) - 4
-        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None)
+        mock_click.assert_called_once_with(expected_x, expected_y, overlay=None, hwnd=0, rect_left=0, rect_top=0)
 
 
 class TestEngineExports:

@@ -1,0 +1,16 @@
+- [x] send_click 使用 PostMessageW 发送 WM_LBUTTONDOWN/UP 后台点击
+- [x] send_click 支持右键 WM_RBUTTONDOWN/UP
+- [x] send_key 使用 PostMessageW 发送 WM_KEYDOWN/UP 后台按键
+- [x] send_key 支持 hold_ms 按住指定时间
+- [x] send_key 使用 VkKeyScanW 获取虚拟键码
+- [x] 非 Windows 平台 send_click 降级为 pyautogui
+- [x] 非 Windows 平台 send_key 降级为 pynput
+- [x] click_at 新增 hwnd 参数，hwnd 非 0 时使用后台点击
+- [x] press_key 新增 hwnd 参数，hwnd 非 0 时使用后台按键
+- [x] click_slot 从 context 获取 hwnd 传入 click_at
+- [x] ActionExecutor 各方法从 context["rect"] 获取 hwnd 传入 click_at/press_key
+- [x] is_map_ui_open 缺少 map_ui_indicator 时返回 True
+- [x] detect_error_tip 缺少 place_error_tip 时返回 False
+- [x] executor_bridge 不再调用 focus_window
+- [x] 连接窗口后 GUI 不缩小
+- [x] 所有新增测试通过

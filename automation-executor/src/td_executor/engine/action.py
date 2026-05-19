@@ -52,25 +52,31 @@ def _resolve_key(key: str) -> Any:
     return key
 
 
-def press_key(key: str, hold_ms: int = 0, overlay=None) -> None:
-    if not _PYNPUT_AVAILABLE or KeyboardController is None:
-        logger.warning("pynput is not available; cannot press key '%s'", key)
+def press_key(key: str, hold_ms: int = 0, overlay=None, hwnd: int = 0) -> None:
+    if hwnd:
+        from td_executor.runtime.input import send_key
+        send_key(hwnd, key, hold_ms)
+    elif _PYNPUT_AVAILABLE and KeyboardController is not None:
+        kb = KeyboardController()
+        resolved = _resolve_key(key)
+        kb.press(resolved)
+        if hold_ms > 0:
+            time.sleep(hold_ms / 1000.0)
+        kb.release(resolved)
+    else:
         raise RuntimeError(f"pynput is not available; cannot press key '{key}'")
-    kb = KeyboardController()
-    resolved = _resolve_key(key)
-    kb.press(resolved)
-    if hold_ms > 0:
-        time.sleep(hold_ms / 1000.0)
-    kb.release(resolved)
     if overlay is not None:
         overlay.draw_key_info(key, hold_ms)
 
 
-def click_at(x: int, y: int, button: str = "left", overlay=None) -> None:
-    if not _PYAUTOGUI_AVAILABLE or pyautogui is None:
-        logger.warning("pyautogui is not available; cannot click at (%d, %d)", x, y)
+def click_at(x: int, y: int, button: str = "left", overlay=None, hwnd: int = 0, rect_left: int = 0, rect_top: int = 0) -> None:
+    if hwnd:
+        from td_executor.runtime.input import send_click
+        send_click(hwnd, x - rect_left, y - rect_top, button)
+    elif _PYAUTOGUI_AVAILABLE and pyautogui is not None:
+        pyautogui.click(x=x, y=y, button=button)
+    else:
         raise RuntimeError(f"pyautogui is not available; cannot click at ({x}, {y})")
-    pyautogui.click(x=x, y=y, button=button)
     if overlay is not None:
         overlay.draw_click_marker(x, y)
 
@@ -92,14 +98,14 @@ def ensure_map_open(capture: Any, rect: Any, rois: dict, context=None) -> bool:
     if capture is None or rect is None:
         return False
     from td_executor.vision.detector import VisionDetector
-
     detector = VisionDetector()
     if detector.is_map_ui_open(capture, rect, rois):
         return True
     overlay = (context or {}).get("overlay")
+    hwnd = rect.hwnd if hasattr(rect, 'hwnd') else 0
     for _ in range(MAP_OPEN_MAX_RETRIES):
         try:
-            press_key("o", overlay=overlay)
+            press_key("o", overlay=overlay, hwnd=hwnd)
         except RuntimeError:
             logger.warning("press_key unavailable in ensure_map_open")
             return False
@@ -271,11 +277,11 @@ class ActionExecutor:
         micro_fn = None
         if retry_config.micro_adjust_on_retry:
             def micro_fn():
-                click_slot(slot_id, rect, slots, micro_adjust=True, overlay=context.get("overlay"))
+                click_slot(slot_id, rect, slots, micro_adjust=True, overlay=context.get("overlay"), hwnd=rect.hwnd)
 
         def action_fn():
-            press_key(select_key, overlay=context.get("overlay"))
-            click_slot(slot_id, rect, slots, overlay=context.get("overlay"))
+            press_key(select_key, overlay=context.get("overlay"), hwnd=rect.hwnd)
+            click_slot(slot_id, rect, slots, overlay=context.get("overlay"), hwnd=rect.hwnd)
             time.sleep(wait_after / 1000.0)
 
         result = self._retry_manager.execute_with_retry(
@@ -333,7 +339,7 @@ class ActionExecutor:
         verify_fn = self._build_verify_fn(action, context)
 
         def action_fn():
-            press_key(key, hold_ms=hold_ms, overlay=context.get("overlay"))
+            press_key(key, hold_ms=hold_ms, overlay=context.get("overlay"), hwnd=rect.hwnd)
             time.sleep(wait_after / 1000.0)
 
         result = self._retry_manager.execute_with_retry(
@@ -401,7 +407,7 @@ class ActionExecutor:
                 nav_pan_to_region(info["region_id"], rect, regions, capture, rois, runtime)
 
         def action_fn():
-            click_slot(slot_id, rect, slots, overlay=context.get("overlay"))
+            click_slot(slot_id, rect, slots, overlay=context.get("overlay"), hwnd=rect.hwnd)
             time.sleep(wait_after / 1000.0)
 
         result = self._retry_manager.execute_with_retry(

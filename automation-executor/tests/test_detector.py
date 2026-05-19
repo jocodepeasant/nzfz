@@ -233,7 +233,7 @@ class TestIsMapUiOpen:
         rect = MagicMock()
         rois = {}
         result = det.is_map_ui_open(capture, rect, rois)
-        assert result is False
+        assert result is True
 
 
 class TestSlotState:

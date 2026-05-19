@@ -347,11 +347,10 @@ class TestWindowOverlay:
 
 class TestExecutorBridgeFocus:
     @patch("td_executor.runtime.window.is_window_valid", return_value=True)
-    @patch("td_executor.runtime.window.focus_window", return_value=True)
     @patch("td_executor.engine.action.ActionExecutor")
     @patch("td_executor.runtime.window.find_game_window")
     @patch.object(ExecutorBridge, "_save_report")
-    def test_focus_called_before_execution(self, mock_save, mock_find, mock_exec_cls, mock_focus, mock_valid):
+    def test_is_window_valid_called_before_execution(self, mock_save, mock_find, mock_exec_cls, mock_valid):
         from td_executor.runtime.window import WindowRect
         mock_find.return_value = WindowRect(hwnd=42, left=0, top=0, width=1920, height=1080)
         mock_executor = MagicMock()
@@ -363,19 +362,16 @@ class TestExecutorBridgeFocus:
         }
         bridge = ExecutorBridge()
         bridge._execute_script(script_data, "逆战", dry_run=True)
-        mock_focus.assert_called_with(42)
         mock_valid.assert_called_with(42)
 
     @patch("td_executor.runtime.window.is_window_valid", return_value=False)
-    @patch("td_executor.runtime.window.focus_window")
     @patch("td_executor.runtime.window.find_game_window")
     @patch.object(ExecutorBridge, "_save_report")
-    def test_stops_when_window_invalid(self, mock_save, mock_find, mock_focus, mock_valid):
+    def test_stops_when_window_invalid(self, mock_save, mock_find, mock_valid):
         from td_executor.runtime.window import WindowRect
         mock_find.return_value = WindowRect(hwnd=42, left=0, top=0, width=1920, height=1080)
         bridge = ExecutorBridge()
         bridge._execute_script(script_data={"script_id": "t", "script_name": "t", "waves": [{"wave": 1, "actions": []}]}, title_keyword="逆战", dry_run=True)
-        mock_focus.assert_not_called()
         events = []
         while True:
             evt = bridge.get_event()
@@ -386,6 +382,25 @@ class TestExecutorBridgeFocus:
         done = [e for e in events if isinstance(e, ExecutionDoneEvent)]
         assert len(done) == 1
         assert done[0].result == "error"
+
+    @patch("td_executor.runtime.window.focus_window")
+    @patch("td_executor.runtime.window.is_window_valid", return_value=True)
+    @patch("td_executor.engine.action.ActionExecutor")
+    @patch("td_executor.runtime.window.find_game_window")
+    @patch.object(ExecutorBridge, "_save_report")
+    def test_focus_window_not_called(self, mock_save, mock_find, mock_exec_cls, mock_valid, mock_focus):
+        from td_executor.runtime.window import WindowRect
+        mock_find.return_value = WindowRect(hwnd=42, left=0, top=0, width=1920, height=1080)
+        mock_executor = MagicMock()
+        mock_exec_cls.return_value = mock_executor
+        mock_executor.execute.return_value = {"success": True, "skipped": False}
+        script_data = {
+            "script_id": "test", "script_name": "测试",
+            "waves": [{"wave": 1, "actions": [{"type": "log", "name": "日志"}]}],
+        }
+        bridge = ExecutorBridge()
+        bridge._execute_script(script_data, "逆战", dry_run=True)
+        mock_focus.assert_not_called()
 
 
 class TestDebugMode:
