@@ -112,7 +112,16 @@ class ScriptTab(ttk.Frame):
         wave_count = len(waves)
         total_actions = sum(len(w.get("actions", [])) for w in waves)
         traps = data.get("traps", [])
-        trap_list = ", ".join(traps) if traps else "无"
+        if not traps:
+            trap_list = "无"
+        else:
+            trap_names = []
+            for t in traps:
+                if isinstance(t, dict):
+                    trap_names.append(t.get("trap_name") or t.get("trap_id") or str(t))
+                else:
+                    trap_names.append(str(t))
+            trap_list = ", ".join(trap_names)
         summary = (
             f"地图: {map_name}\n"
             f"波次: {wave_count}\n"
