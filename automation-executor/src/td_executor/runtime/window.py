@@ -48,6 +48,14 @@ def is_window_valid(hwnd: int) -> bool:
     return _is_window_valid_fallback(hwnd)
 
 
+def list_windows(title_keyword: str = "") -> list[dict]:
+    windows = _list_windows_win()
+    if not title_keyword:
+        return windows
+    keyword = title_keyword.lower()
+    return [w for w in windows if keyword in w["title"].lower()]
+
+
 if sys.platform == "win32":
     import ctypes
 
@@ -125,6 +133,23 @@ if sys.platform == "win32":
     def _is_window_valid_win(hwnd: int) -> bool:
         return bool(user32.IsWindow(hwnd) and user32.IsWindowVisible(hwnd))
 
+    def _list_windows_win() -> list[dict]:
+        result: list[dict] = []
+
+        def _enum_cb(hwnd: int, _lparam: int) -> int:
+            if not user32.IsWindowVisible(hwnd):
+                return 1
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length == 0:
+                return 1
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            result.append({"hwnd": hwnd, "title": buf.value})
+            return 1
+
+        user32.EnumWindows(WNDENUMPROC(_enum_cb), 0)
+        return result
+
 else:
 
     def _find_game_window_win(title_keyword: str) -> WindowRect | None:
@@ -138,6 +163,9 @@ else:
 
     def _is_window_valid_win(hwnd: int) -> bool:
         return False
+
+    def _list_windows_win() -> list[dict]:
+        return []
 
 
 def _find_game_window_fallback(title_keyword: str) -> WindowRect | None:

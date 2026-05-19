@@ -125,16 +125,30 @@ class ScriptTab(ttk.Frame):
         self._preview_text.config(state=tk.DISABLED)
 
     def _on_connect_window(self) -> None:
+        if self.app.window_rect is not None:
+            self.app.disconnect_window()
+            self._connect_btn.config(text="连接窗口", state=tk.NORMAL)
+            return
         title_keyword = self._title_var.get().strip()
         if not title_keyword:
             messagebox.showerror("错误", "请输入窗口标题关键字")
             return
-        ok = self.app.connect_window(title_keyword)
+        from td_executor.runtime.window import list_windows
+        windows = list_windows(title_keyword)
+        if not windows:
+            messagebox.showinfo("提示", "未找到匹配的窗口进程")
+            return
+        from td_executor.ui.window_select_dialog import WindowSelectDialog
+        dialog = WindowSelectDialog(self.app, windows)
+        self.app.wait_window(dialog)
+        if dialog.selected_hwnd is None:
+            return
+        ok = self.app.connect_window_by_hwnd(dialog.selected_hwnd)
         if ok:
-            self._connect_btn.config(text="已连接 ✓")
+            self._connect_btn.config(text="断开连接")
         else:
             self._connect_btn.config(text="连接窗口")
-            messagebox.showerror("连接失败", f"未找到标题包含「{title_keyword}」的窗口")
+            messagebox.showerror("连接失败", "无法获取窗口信息")
 
     def _on_start(self) -> None:
         if self._script_data is None:
@@ -156,6 +170,7 @@ class ScriptTab(ttk.Frame):
             return
         self._start_btn.config(state=tk.DISABLED)
         self._stop_btn.config(state=tk.NORMAL)
+        self._connect_btn.config(state=tk.DISABLED)
         self.app.notebook.select(0)
         self.app.set_status("运行中")
         self.app.monitor_tab.reset()
@@ -176,7 +191,7 @@ class ScriptTab(ttk.Frame):
         self._script_data = None
         self._start_btn.config(state=tk.NORMAL)
         self._stop_btn.config(state=tk.DISABLED)
-        self._connect_btn.config(text="连接窗口")
+        self._connect_btn.config(text="连接窗口", state=tk.NORMAL)
         self.app.bridge.reset()
         self.app.disconnect_window()
         self.app.set_status("就绪")
@@ -187,7 +202,15 @@ class ScriptTab(ttk.Frame):
     def _on_execution_done(self) -> None:
         self._start_btn.config(state=tk.NORMAL)
         self._stop_btn.config(state=tk.DISABLED)
+        if self.app.window_rect is not None:
+            self._connect_btn.config(state=tk.NORMAL, text="断开连接")
+        else:
+            self._connect_btn.config(state=tk.NORMAL, text="连接窗口")
 
     def on_execution_done(self, event=None) -> None:
         self._start_btn.config(state=tk.NORMAL)
         self._stop_btn.config(state=tk.DISABLED)
+        if self.app.window_rect is not None:
+            self._connect_btn.config(state=tk.NORMAL, text="断开连接")
+        else:
+            self._connect_btn.config(state=tk.NORMAL, text="连接窗口")

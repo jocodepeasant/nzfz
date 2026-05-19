@@ -1,0 +1,17 @@
+- [x] list_windows 函数正确枚举可见窗口，返回 hwnd 和 title
+- [x] list_windows 按关键字过滤窗口
+- [x] 非 Windows 平台 list_windows 返回空列表
+- [x] connect_window 不调用 focus_window，GUI 窗口不会缩小
+- [x] WindowSelectDialog 显示匹配窗口列表（序号、标题、句柄）
+- [x] WindowSelectDialog 为模态窗口，居中显示在主窗口上
+- [x] 未选中行时"连接"按钮禁用
+- [x] 无匹配窗口时弹出提示，不弹出选择对话框
+- [x] 选中窗口后点击"连接"完成连接
+- [x] 点击"取消"关闭对话框，不改变连接状态
+- [x] 连接成功后按钮文本变为"断开连接"
+- [x] 点击"断开连接"清除连接状态，按钮恢复为"连接窗口"
+- [x] 断开连接时状态栏恢复"窗口: 未连接"
+- [x] 断开连接时画面标签页清除截图
+- [x] 执行器运行中时"断开连接"按钮禁用
+- [x] connect_window_by_hwnd 根据 hwnd 获取 rect 并设置连接
+- [x] 所有新增测试通过
