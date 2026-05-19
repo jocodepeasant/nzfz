@@ -21,9 +21,6 @@ runtime = [
   "mss>=9.0.0",
   "loguru>=0.7.2",
 ]
-win = [
-  "pywin32>=306",
-]
 input = [
   "pynput>=1.7.7",
   "pyautogui>=0.9.54",
