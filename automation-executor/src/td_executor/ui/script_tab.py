@@ -56,6 +56,11 @@ class ScriptTab(ttk.Frame):
             side=tk.LEFT, padx=5, pady=5
         )
 
+        self._debug_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(param_frame, text="调试模式", variable=self._debug_var).pack(
+            side=tk.LEFT, padx=5, pady=5
+        )
+
         ctrl_frame = ttk.Frame(self)
         ctrl_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -172,11 +177,13 @@ class ScriptTab(ttk.Frame):
             self.app.bridge.start_execution(
                 self._script_data, title_keyword, dry_run,
                 window_rect=self.app.window_rect,
+                debug=self._debug_var.get(),
                 on_done=self._on_run_done,
             )
         except Exception as e:
             messagebox.showerror("启动失败", str(e))
             return
+        self.app.bridge.set_overlay(self.app.overlay if self._debug_var.get() else None)
         self._start_btn.config(state=tk.DISABLED)
         self._stop_btn.config(state=tk.NORMAL)
         self._connect_btn.config(state=tk.DISABLED)

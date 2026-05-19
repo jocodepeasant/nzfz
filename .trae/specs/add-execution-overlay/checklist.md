@@ -1,0 +1,15 @@
+- [x] WindowOverlay 使用 ctypes 创建透明分层窗口（WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST）
+- [x] WindowOverlay.show() 在目标窗口客户区上方绘制红色边框
+- [x] WindowOverlay.hide() 销毁覆盖层窗口
+- [x] WindowOverlay.draw_click_marker() 绘制红色十字标记并定时清除
+- [x] WindowOverlay.draw_key_info() 显示按键信息并定时清除
+- [x] 非 Windows 平台 WindowOverlay 为空实现
+- [x] executor_bridge 执行前调用 focus_window 聚焦游戏窗口
+- [x] 每个波次开始前检查 is_window_valid，无效则停止执行
+- [x] 连接窗口后创建 overlay 并 show
+- [x] 断开连接时销毁 overlay
+- [x] 脚本标签页新增"调试模式"复选框
+- [x] click_at 支持调用 overlay.draw_click_marker
+- [x] press_key 支持调用 overlay.draw_key_info
+- [x] executor_bridge 将 overlay 传入 context
+- [x] 所有新增测试通过

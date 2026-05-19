@@ -166,7 +166,7 @@ class TestEnsureMapOpen:
         mock_detector_cls.return_value = mock_detector
         result = ensure_map_open(MagicMock(), MagicMock(), {})
         assert result is True
-        mock_press.assert_called_once_with("o")
+        mock_press.assert_called_once_with("o", overlay=None)
 
     @patch("td_executor.engine.action.press_key")
     @patch("td_executor.engine.action.time.sleep")

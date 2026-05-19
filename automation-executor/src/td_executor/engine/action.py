@@ -52,7 +52,7 @@ def _resolve_key(key: str) -> Any:
     return key
 
 
-def press_key(key: str, hold_ms: int = 0) -> None:
+def press_key(key: str, hold_ms: int = 0, overlay=None) -> None:
     if not _PYNPUT_AVAILABLE or KeyboardController is None:
         logger.warning("pynput is not available; cannot press key '%s'", key)
         raise RuntimeError(f"pynput is not available; cannot press key '{key}'")
@@ -62,13 +62,17 @@ def press_key(key: str, hold_ms: int = 0) -> None:
     if hold_ms > 0:
         time.sleep(hold_ms / 1000.0)
     kb.release(resolved)
+    if overlay is not None:
+        overlay.draw_key_info(key, hold_ms)
 
 
-def click_at(x: int, y: int, button: str = "left") -> None:
+def click_at(x: int, y: int, button: str = "left", overlay=None) -> None:
     if not _PYAUTOGUI_AVAILABLE or pyautogui is None:
         logger.warning("pyautogui is not available; cannot click at (%d, %d)", x, y)
         raise RuntimeError(f"pyautogui is not available; cannot click at ({x}, {y})")
     pyautogui.click(x=x, y=y, button=button)
+    if overlay is not None:
+        overlay.draw_click_marker(x, y)
 
 
 def drag(from_x: int, from_y: int, to_x: int, to_y: int, duration_ms: int = 600) -> None:
@@ -84,7 +88,7 @@ def drag(from_x: int, from_y: int, to_x: int, to_y: int, duration_ms: int = 600)
     pyautogui.mouseUp(button="left")
 
 
-def ensure_map_open(capture: Any, rect: Any, rois: dict) -> bool:
+def ensure_map_open(capture: Any, rect: Any, rois: dict, context=None) -> bool:
     if capture is None or rect is None:
         return False
     from td_executor.vision.detector import VisionDetector
@@ -92,9 +96,10 @@ def ensure_map_open(capture: Any, rect: Any, rois: dict) -> bool:
     detector = VisionDetector()
     if detector.is_map_ui_open(capture, rect, rois):
         return True
+    overlay = (context or {}).get("overlay")
     for _ in range(MAP_OPEN_MAX_RETRIES):
         try:
-            press_key("o")
+            press_key("o", overlay=overlay)
         except RuntimeError:
             logger.warning("press_key unavailable in ensure_map_open")
             return False
@@ -232,7 +237,7 @@ class ActionExecutor:
         slot_id = action.get("slot_id", "")
         trap_id = action.get("trap_id", "")
 
-        if not ensure_map_open(capture, rect, rois):
+        if not ensure_map_open(capture, rect, rois, context=context):
             return {"success": False, "skipped": False, "error": "map not open"}
 
         info = locate_slot(slot_id, rect, slots)
@@ -266,11 +271,11 @@ class ActionExecutor:
         micro_fn = None
         if retry_config.micro_adjust_on_retry:
             def micro_fn():
-                click_slot(slot_id, rect, slots, micro_adjust=True)
+                click_slot(slot_id, rect, slots, micro_adjust=True, overlay=context.get("overlay"))
 
         def action_fn():
-            press_key(select_key)
-            click_slot(slot_id, rect, slots)
+            press_key(select_key, overlay=context.get("overlay"))
+            click_slot(slot_id, rect, slots, overlay=context.get("overlay"))
             time.sleep(wait_after / 1000.0)
 
         result = self._retry_manager.execute_with_retry(
@@ -301,7 +306,7 @@ class ActionExecutor:
         trap_id = action.get("trap_id", "")
         target_level = action.get("target_level", 0)
 
-        if not ensure_map_open(capture, rect, rois):
+        if not ensure_map_open(capture, rect, rois, context=context):
             return {"success": False, "skipped": False, "error": "map not open"}
 
         cond_result = self._check_conditions(action, context)
@@ -328,7 +333,7 @@ class ActionExecutor:
         verify_fn = self._build_verify_fn(action, context)
 
         def action_fn():
-            press_key(key, hold_ms=hold_ms)
+            press_key(key, hold_ms=hold_ms, overlay=context.get("overlay"))
             time.sleep(wait_after / 1000.0)
 
         result = self._retry_manager.execute_with_retry(
@@ -361,7 +366,7 @@ class ActionExecutor:
 
         slot_id = action.get("slot_id", "")
 
-        if not ensure_map_open(capture, rect, rois):
+        if not ensure_map_open(capture, rect, rois, context=context):
             return {"success": False, "skipped": False, "error": "map not open"}
 
         info = locate_slot(slot_id, rect, slots)
@@ -396,7 +401,7 @@ class ActionExecutor:
                 nav_pan_to_region(info["region_id"], rect, regions, capture, rois, runtime)
 
         def action_fn():
-            click_slot(slot_id, rect, slots)
+            click_slot(slot_id, rect, slots, overlay=context.get("overlay"))
             time.sleep(wait_after / 1000.0)
 
         result = self._retry_manager.execute_with_retry(

@@ -24,6 +24,7 @@ class ExecutorBridge:
         self._stop_event = threading.Event()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._overlay = None
 
     @property
     def running(self) -> bool:
@@ -42,6 +43,9 @@ class ExecutorBridge:
     def request_stop(self) -> None:
         self._stop_event.set()
 
+    def set_overlay(self, overlay) -> None:
+        self._overlay = overlay
+
     def reset(self) -> None:
         self._stop_event.clear()
         while not self._event_queue.empty():
@@ -56,6 +60,7 @@ class ExecutorBridge:
         title_keyword: str = "逆战",
         dry_run: bool = False,
         window_rect: Any | None = None,
+        debug: bool = False,
         on_done: Callable[[], None] | None = None,
     ) -> bool:
         if self._running:
@@ -65,7 +70,7 @@ class ExecutorBridge:
 
         def _run():
             try:
-                self._execute_script(script_data, title_keyword, dry_run, window_rect)
+                self._execute_script(script_data, title_keyword, dry_run, window_rect, debug)
             except Exception:
                 logger.exception("Executor thread error")
             finally:
@@ -77,7 +82,7 @@ class ExecutorBridge:
         self._thread.start()
         return True
 
-    def _execute_script(self, script_data: dict, title_keyword: str, dry_run: bool, window_rect: Any | None = None) -> None:
+    def _execute_script(self, script_data: dict, title_keyword: str, dry_run: bool, window_rect: Any | None = None, debug: bool = False) -> None:
         from td_executor.engine.action import ActionExecutor
         from td_executor.engine.report import ActionLog, RunReport
         from td_executor.runtime.capture import ScreenCapture
@@ -100,6 +105,12 @@ class ExecutorBridge:
             self._event_queue.put(ExecutionDoneEvent(result="error"))
             return
 
+        from td_executor.runtime.window import focus_window, is_window_valid
+        if not is_window_valid(rect.hwnd):
+            self._event_queue.put(ExecutionDoneEvent(result="error"))
+            return
+        focus_window(rect.hwnd)
+
         capture = None
         try:
             from td_executor.runtime.capture import CaptureConfig
@@ -120,6 +131,8 @@ class ExecutorBridge:
             "regions": regions,
             "runtime": runtime,
             "state": {},
+            "debug": debug,
+            "overlay": self._overlay,
         }
 
         executor = ActionExecutor()
@@ -128,6 +141,9 @@ class ExecutorBridge:
 
         for wave_idx, wave in enumerate(waves):
             if self._stop_event.is_set():
+                break
+            if not is_window_valid(rect.hwnd):
+                self._event_queue.put(ExecutionDoneEvent(result="error"))
                 break
             wave_num = wave.get("wave", wave_idx + 1)
             actions = wave.get("actions", [])

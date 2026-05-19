@@ -56,7 +56,7 @@ def get_micro_adjust_points(center_x: int, center_y: int, precision: dict | None
     return []
 
 
-def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: bool = False) -> bool:
+def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: bool = False, overlay=None) -> bool:
     info = locate_slot(slot_id, rect, slots)
     if not info:
         return False
@@ -70,13 +70,13 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
             point = points[idx % len(points)]
             _micro_adjust_indices[slot_id] = (idx + 1) % len(points)
             try:
-                click_at(point[0], point[1])
+                click_at(point[0], point[1], overlay=overlay)
             except Exception:
                 logger.warning("click_at failed for slot %s at (%d, %d)", slot_id, point[0], point[1])
                 return False
             return True
     try:
-        click_at(center_x, center_y)
+        click_at(center_x, center_y, overlay=overlay)
     except Exception:
         logger.warning("click_at failed for slot %s at (%d, %d)", slot_id, center_x, center_y)
         return False
