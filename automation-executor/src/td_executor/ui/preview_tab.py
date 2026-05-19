@@ -48,11 +48,19 @@ class PreviewTab(ttk.Frame):
         self._canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
     def set_script_data(self, script_data: dict) -> None:
-        from td_executor.runtime.window import find_game_window
-
         self._script_data = script_data
-        self._rect = find_game_window()
+        if self._rect is None:
+            from td_executor.runtime.window import find_game_window
+            self._rect = find_game_window()
         self._start_auto_refresh()
+
+    def set_window_rect(self, rect) -> None:
+        self._rect = rect
+        if rect is not None:
+            self._on_refresh()
+        else:
+            self._stop_auto_refresh()
+            self._canvas.delete("all")
 
     def _start_auto_refresh(self) -> None:
         self._stop_auto_refresh()

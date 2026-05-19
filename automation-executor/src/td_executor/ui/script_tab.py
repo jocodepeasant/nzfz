@@ -46,6 +46,11 @@ class ScriptTab(ttk.Frame):
             side=tk.LEFT, padx=5, pady=5
         )
 
+        self._connect_btn = ttk.Button(
+            param_frame, text="连接窗口", command=self._on_connect_window
+        )
+        self._connect_btn.pack(side=tk.LEFT, padx=5, pady=5)
+
         self._dry_run_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(param_frame, text="试运行(dry-run)", variable=self._dry_run_var).pack(
             side=tk.LEFT, padx=5, pady=5
@@ -119,6 +124,18 @@ class ScriptTab(ttk.Frame):
         self._preview_text.insert("1.0", summary)
         self._preview_text.config(state=tk.DISABLED)
 
+    def _on_connect_window(self) -> None:
+        title_keyword = self._title_var.get().strip()
+        if not title_keyword:
+            messagebox.showerror("错误", "请输入窗口标题关键字")
+            return
+        ok = self.app.connect_window(title_keyword)
+        if ok:
+            self._connect_btn.config(text="已连接 ✓")
+        else:
+            self._connect_btn.config(text="连接窗口")
+            messagebox.showerror("连接失败", f"未找到标题包含「{title_keyword}」的窗口")
+
     def _on_start(self) -> None:
         if self._script_data is None:
             messagebox.showerror("错误", "请先校验脚本")
@@ -130,7 +147,9 @@ class ScriptTab(ttk.Frame):
         dry_run = self._dry_run_var.get()
         try:
             self.app.bridge.start_execution(
-                self._script_data, title_keyword, dry_run, on_done=self._on_run_done
+                self._script_data, title_keyword, dry_run,
+                window_rect=self.app.window_rect,
+                on_done=self._on_run_done,
             )
         except Exception as e:
             messagebox.showerror("启动失败", str(e))
@@ -140,7 +159,8 @@ class ScriptTab(ttk.Frame):
         self.app.notebook.select(0)
         self.app.set_status("运行中")
         self.app.monitor_tab.reset()
-        self.app.preview_tab.set_script_data(self._script_data)
+        if self._script_data:
+            self.app.preview_tab.set_script_data(self._script_data)
 
     def _on_stop(self) -> None:
         self.app.bridge.request_stop()
@@ -156,7 +176,9 @@ class ScriptTab(ttk.Frame):
         self._script_data = None
         self._start_btn.config(state=tk.NORMAL)
         self._stop_btn.config(state=tk.DISABLED)
+        self._connect_btn.config(text="连接窗口")
         self.app.bridge.reset()
+        self.app.disconnect_window()
         self.app.set_status("就绪")
 
     def _on_run_done(self) -> None:

@@ -18,6 +18,7 @@ class ExecutorApp(tk.Tk):
 
         self.bridge = ExecutorBridge()
         self._poll_id: str | None = None
+        self._window_rect = None
 
         self._build_ui()
         self._start_status_clock()
@@ -76,6 +77,30 @@ class ExecutorApp(tk.Tk):
 
     def set_window_info(self, info: str) -> None:
         self.window_label.config(text=f"窗口: {info}")
+
+    @property
+    def window_rect(self):
+        return self._window_rect
+
+    def connect_window(self, title_keyword: str) -> bool:
+        from td_executor.runtime.window import find_game_window
+
+        rect = find_game_window(title_keyword)
+        if rect is None:
+            self.set_window_info("未找到")
+            return False
+        self._window_rect = rect
+        info = f"{rect.width}x{rect.height}"
+        if rect.title:
+            info = f"{rect.title} ({info})"
+        self.set_window_info(info)
+        self.preview_tab.set_window_rect(rect)
+        return True
+
+    def disconnect_window(self) -> None:
+        self._window_rect = None
+        self.set_window_info("未连接")
+        self.preview_tab.set_window_rect(None)
 
     def start_polling(self) -> None:
         self._poll_queue()

@@ -22,7 +22,7 @@
                                     ↓
 波次4 (可并行2人):  ~~T08-地图导航~~  |  ~~T09-格子定位~~ ✅
                                     ↓
-波次5 (串行):       ~~T10-动作执行完整流程~~ ✅ → T11-重试集成 → T12-日志集成 → T13-批量执行
+波次5 (串行):       ~~T10-动作执行完整流程~~ ✅ → ~~T11-重试集成~~ ✅ → ~~T12-日志集成~~ ✅ → T13-批量执行
 ```
 
 ---
@@ -618,35 +618,49 @@ class ActionExecutor:
 
 ---
 
-### T11 - 重试集成
+### ✅ T11 - 重试集成（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P11，中 |
-| **修改文件** | `automation-executor/src/td_executor/engine/retry.py` |
+| **状态** | ✅ 已完成 |
+| **修改文件** | `automation-executor/src/td_executor/engine/action.py`、`automation-executor/src/td_executor/engine/retry.py` |
 | **依赖** | T08（导航，用于 `reset_view_before_retry`）、T10（动作执行） |
+
+#### 已实现功能
+
+- `ActionExecutor` 集成 `RetryManager`，通过 `execute_with_retry` 方法实现动作重试
+- `reset_view_before_retry=True` 时重试前正确重置视野
+- `micro_adjust_on_retry=True` 时重试使用微调点击
+- RetryManager 与动作执行正确集成
 
 #### 验收标准
 
-- [ ] `reset_view_before_retry=True` 时重试前正确重置视野
-- [ ] `micro_adjust_on_retry=True` 时重试使用微调点击
-- [ ] RetryManager 与动作执行正确集成
+- [x] `reset_view_before_retry=True` 时重试前正确重置视野
+- [x] `micro_adjust_on_retry=True` 时重试使用微调点击
+- [x] RetryManager 与动作执行正确集成
 
 ---
 
-### T12 - 日志集成
+### ✅ T12 - 日志集成（已完成）
 
 | 项目 | 内容 |
 |------|------|
-| **优先级** | P12，中 |
-| **修改文件** | `automation-executor/src/td_executor/engine/report.py`、`automation-executor/src/td_executor/engine/action.py` |
+| **状态** | ✅ 已完成 |
+| **修改文件** | `automation-executor/src/td_executor/ui/executor_bridge.py`、`automation-executor/src/td_executor/engine/report.py` |
 | **依赖** | T02（日志数据结构）、T10（动作执行） |
+
+#### 已实现功能
+
+- `executor_bridge.py._execute_script()` 在执行流程中为每个动作创建 `ActionLog` 记录
+- 对局结束生成完整 `RunReport` 并通过 `write_report` 写入 JSON 文件
+- 日志记录动作类型、名称、波次、时间戳、成功/失败、重试次数、错误信息
+- GUI 通过事件系统实时展示执行进度
 
 #### 验收标准
 
-- [ ] 每个动作执行都有对应的 `ActionLog` 记录
-- [ ] 对局结束生成完整 `RunReport` 并写入文件
-- [ ] 日志不影响动作执行的性能
+- [x] 每个动作执行都有对应的 `ActionLog` 记录
+- [x] 对局结束生成完整 `RunReport` 并写入文件
+- [x] 日志不影响动作执行的性能
 
 ---
 
@@ -705,6 +719,6 @@ class ActionExecutor:
 | P8 | place_trap | `engine/action.py` + `engine/slot.py` | ✅ 已实现 (T09+T10) |
 | P9 | upgrade_trap | `engine/action.py` | ✅ 已实现 (T10) |
 | P10 | 条件引擎 | `engine/condition.py` | ✅ 已实现 (T06) |
-| P11 | retry 机制 | `engine/retry.py` | ✅ 已实现 (T03)，T11 集成待完成 |
-| P12 | 单局日志 | `engine/report.py` | ✅ 已实现 (T02) |
+| P11 | retry 机制 | `engine/retry.py` + `engine/action.py` | ✅ 已实现 (T03+T11) |
+| P12 | 单局日志 | `engine/report.py` + `ui/executor_bridge.py` | ✅ 已实现 (T02+T12) |
 | P13 | 批量跑固定脚本 | `engine/batch.py` | ❌ T13 |
