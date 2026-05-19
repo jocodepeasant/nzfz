@@ -51,7 +51,9 @@ def _find_game_window_win(title_keyword: str) -> WindowRect | None:
     try:
         import win32gui
     except ImportError:
-        logger.warning("win32gui 不可用，无法定位游戏窗口")
+        logger.error(
+            "win32gui 不可用，无法定位游戏窗口。请安装 pywin32: pip install pywin32"
+        )
         return None
 
     matched: list[tuple[int, str]] = []
