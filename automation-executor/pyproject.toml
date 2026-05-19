@@ -20,10 +20,6 @@ runtime = [
   "opencv-python-headless>=4.10.0",
   "mss>=9.0.0",
   "loguru>=0.7.2",
-  "pywin32>=306; sys_platform == 'win32'",
-]
-win = [
-  "pywin32>=306",
 ]
 input = [
   "pynput>=1.7.7",

@@ -129,14 +129,7 @@ class ScriptTab(ttk.Frame):
         if not title_keyword:
             messagebox.showerror("错误", "请输入窗口标题关键字")
             return
-        try:
-            ok = self.app.connect_window(title_keyword)
-        except ImportError:
-            messagebox.showerror(
-                "缺少依赖",
-                "窗口定位需要 pywin32。\n请运行: pip install pywin32\n或重新运行启动脚本安装依赖。"
-            )
-            return
+        ok = self.app.connect_window(title_keyword)
         if ok:
             self._connect_btn.config(text="已连接 ✓")
         else:

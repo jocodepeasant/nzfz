@@ -175,8 +175,8 @@ if !errorlevel! equ 0 (
     exit /b 0
 )
 
-echo [INFO] 安装依赖（基础 + runtime + input + ui + win）...
-python -m pip install -e "%PROJECT_DIR%[runtime,input,ui,win]" -q
+echo [INFO] 安装依赖（基础 + runtime + input + ui）...
+python -m pip install -e "%PROJECT_DIR%[runtime,input,ui]" -q
 if !errorlevel! neq 0 (
     echo [WARN] 完整依赖安装失败，尝试仅安装基础依赖...
     python -m pip install -e "%PROJECT_DIR%" -q
