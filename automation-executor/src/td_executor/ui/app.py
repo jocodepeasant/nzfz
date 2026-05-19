@@ -95,6 +95,23 @@ class ExecutorApp(tk.Tk):
             info = f"{rect.title} ({info})"
         self.set_window_info(info)
         self.preview_tab.set_window_rect(rect)
+        self.focus_force()
+        return True
+
+    def connect_window_by_hwnd(self, hwnd: int) -> bool:
+        from td_executor.runtime.window import get_window_rect
+
+        rect = get_window_rect(hwnd)
+        if rect is None:
+            self.set_window_info("未找到")
+            return False
+        self._window_rect = rect
+        info = f"{rect.width}x{rect.height}"
+        if rect.title:
+            info = f"{rect.title} ({info})"
+        self.set_window_info(info)
+        self.preview_tab.set_window_rect(rect)
+        self.focus_force()
         return True
 
     def disconnect_window(self) -> None:

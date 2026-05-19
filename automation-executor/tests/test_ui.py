@@ -270,3 +270,60 @@ class TestCLIGuiCommand:
         runner = CliRunner()
         result = runner.invoke(app, ["gui"])
         mock_launch.assert_called_once()
+
+
+class TestListWindows:
+    @patch("td_executor.runtime.window.sys")
+    def test_list_windows_fallback_non_win32(self, mock_sys: MagicMock) -> None:
+        mock_sys.platform = "linux"
+        from td_executor.runtime.window import list_windows
+        result = list_windows()
+        assert result == []
+
+    def test_list_windows_with_keyword(self) -> None:
+        from td_executor.runtime.window import list_windows
+        fake_windows = [
+            {"hwnd": 1, "title": "逆战 - 游戏"},
+            {"hwnd": 2, "title": "记事本"},
+            {"hwnd": 3, "title": "逆战 - 大厅"},
+        ]
+        with patch("td_executor.runtime.window._list_windows_win", return_value=fake_windows):
+            result = list_windows("逆战")
+        assert len(result) == 2
+        assert result[0]["hwnd"] == 1
+        assert result[1]["hwnd"] == 3
+
+
+class TestConnectWindowByHwnd:
+    @patch("td_executor.runtime.window.get_window_rect")
+    def test_connect_by_hwnd_success(self, mock_get_rect: MagicMock) -> None:
+        from td_executor.runtime.window import WindowRect
+        mock_get_rect.return_value = WindowRect(hwnd=42, left=100, top=200, width=800, height=600, title="测试窗口")
+        bridge = ExecutorBridge()
+        with patch("td_executor.ui.app.ExecutorBridge", return_value=bridge):
+            from td_executor.ui.app import ExecutorApp
+            with patch.object(ExecutorApp, "__init__", lambda self: None):
+                app = ExecutorApp()
+                app._window_rect = None
+                app.set_window_info = MagicMock()
+                app.preview_tab = MagicMock()
+                app.focus_force = MagicMock()
+                result = app.connect_window_by_hwnd(42)
+        assert result is True
+        assert app._window_rect is not None
+        assert app._window_rect.hwnd == 42
+
+    @patch("td_executor.runtime.window.get_window_rect", return_value=None)
+    def test_connect_by_hwnd_not_found(self, mock_get_rect: MagicMock) -> None:
+        bridge = ExecutorBridge()
+        with patch("td_executor.ui.app.ExecutorBridge", return_value=bridge):
+            from td_executor.ui.app import ExecutorApp
+            with patch.object(ExecutorApp, "__init__", lambda self: None):
+                app = ExecutorApp()
+                app._window_rect = None
+                app.set_window_info = MagicMock()
+                app.preview_tab = MagicMock()
+                app.focus_force = MagicMock()
+                result = app.connect_window_by_hwnd(9999)
+        assert result is False
+        assert app._window_rect is None
