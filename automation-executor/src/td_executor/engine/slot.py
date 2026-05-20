@@ -56,7 +56,7 @@ def get_micro_adjust_points(center_x: int, center_y: int, precision: dict | None
     return []
 
 
-def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: bool = False, overlay=None, hwnd: int = 0) -> bool:
+def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: bool = False, overlay=None, hwnd: int = 0, game_hwnd: int = 0) -> bool:
     info = locate_slot(slot_id, rect, slots)
     if not info:
         return False
@@ -70,13 +70,13 @@ def click_slot(slot_id: str, rect: WindowRect, slots: list[dict], micro_adjust: 
             point = points[idx % len(points)]
             _micro_adjust_indices[slot_id] = (idx + 1) % len(points)
             try:
-                click_at(point[0], point[1], overlay=overlay, hwnd=hwnd, rect_left=rect.left, rect_top=rect.top)
+                click_at(point[0], point[1], overlay=overlay, hwnd=hwnd, rect_left=rect.left, rect_top=rect.top, game_hwnd=game_hwnd if game_hwnd else hwnd)
             except Exception:
                 logger.warning("click_at failed for slot %s at (%d, %d)", slot_id, point[0], point[1])
                 return False
             return True
     try:
-        click_at(center_x, center_y, overlay=overlay, hwnd=hwnd, rect_left=rect.left, rect_top=rect.top)
+        click_at(center_x, center_y, overlay=overlay, hwnd=hwnd, rect_left=rect.left, rect_top=rect.top, game_hwnd=game_hwnd if game_hwnd else hwnd)
     except Exception:
         logger.warning("click_at failed for slot %s at (%d, %d)", slot_id, center_x, center_y)
         return False

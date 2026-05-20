@@ -69,10 +69,10 @@ def press_key(key: str, hold_ms: int = 0, overlay=None, hwnd: int = 0) -> None:
         overlay.draw_key_info(key, hold_ms)
 
 
-def click_at(x: int, y: int, button: str = "left", overlay=None, hwnd: int = 0, rect_left: int = 0, rect_top: int = 0) -> None:
+def click_at(x: int, y: int, button: str = "left", overlay=None, hwnd: int = 0, rect_left: int = 0, rect_top: int = 0, game_hwnd: int = 0) -> None:
     if hwnd:
         from td_executor.runtime.input import send_click
-        send_click(hwnd, x - rect_left, y - rect_top, button)
+        send_click(hwnd, x, y, button, game_hwnd=game_hwnd)
     elif _PYAUTOGUI_AVAILABLE and pyautogui is not None:
         pyautogui.click(x=x, y=y, button=button)
     else:
