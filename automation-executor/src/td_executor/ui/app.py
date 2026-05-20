@@ -100,10 +100,10 @@ class ExecutorApp(tk.Tk):
             info = f"{rect.title} ({info})"
         self.set_window_info(info)
         self.preview_tab.set_window_rect(rect)
+        self.focus_force()
         from td_executor.runtime.overlay import WindowOverlay
         self._overlay = WindowOverlay()
-        self._overlay.show(rect.hwnd)
-        self.focus_force()
+        self._overlay.show(rect.hwnd, window_info=info)
         return True
 
     def connect_window_by_hwnd(self, hwnd: int) -> bool:
@@ -119,10 +119,10 @@ class ExecutorApp(tk.Tk):
             info = f"{rect.title} ({info})"
         self.set_window_info(info)
         self.preview_tab.set_window_rect(rect)
+        self.focus_force()
         from td_executor.runtime.overlay import WindowOverlay
         self._overlay = WindowOverlay()
-        self._overlay.show(rect.hwnd)
-        self.focus_force()
+        self._overlay.show(rect.hwnd, window_title=info)
         return True
 
     def disconnect_window(self) -> None:

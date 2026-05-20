@@ -24,6 +24,9 @@ if sys.platform == "win32":
 
     user32 = ctypes.windll.user32
 
+    class _POINT(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
     def _lparam_for_key(vk_code, is_keydown=True):
         scan_code = user32.MapVirtualKeyW(vk_code, 0)
         repeat_count = 1
@@ -40,8 +43,14 @@ if sys.platform == "win32":
             | ((transition_state & 0x1) << 31)
         )
 
-    def send_click(hwnd: int, x: int, y: int, button: str = "left") -> None:
-        lparam = MAKELPARAM(x, y)
+    def send_click(hwnd: int, x: int, y: int, button: str = "left", game_hwnd: int = 0) -> None:
+        if game_hwnd == 0:
+            game_hwnd = hwnd
+        screen_pt = _POINT(x, y)
+        user32.ClientToScreen(game_hwnd, ctypes.byref(screen_pt))
+        if hwnd != game_hwnd:
+            user32.ScreenToClient(hwnd, ctypes.byref(screen_pt))
+        lparam = MAKELPARAM(screen_pt.x, screen_pt.y)
         if button == "right":
             user32.PostMessageW(hwnd, WM_RBUTTONDOWN, 1, lparam)
             user32.PostMessageW(hwnd, WM_RBUTTONUP, 0, lparam)

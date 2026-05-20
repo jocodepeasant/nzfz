@@ -296,9 +296,12 @@ class TestListWindows:
 
 class TestConnectWindowByHwnd:
     @patch("td_executor.runtime.window.get_window_rect")
-    def test_connect_by_hwnd_success(self, mock_get_rect: MagicMock) -> None:
+    @patch("td_executor.runtime.overlay.WindowOverlay")
+    def test_connect_by_hwnd_success(self, mock_overlay_cls: MagicMock, mock_get_rect: MagicMock) -> None:
         from td_executor.runtime.window import WindowRect
         mock_get_rect.return_value = WindowRect(hwnd=42, left=100, top=200, width=800, height=600, title="测试窗口")
+        mock_overlay_instance = MagicMock()
+        mock_overlay_cls.return_value = mock_overlay_instance
         bridge = ExecutorBridge()
         with patch("td_executor.ui.app.ExecutorBridge", return_value=bridge):
             from td_executor.ui.app import ExecutorApp
@@ -312,6 +315,7 @@ class TestConnectWindowByHwnd:
         assert result is True
         assert app._window_rect is not None
         assert app._window_rect.hwnd == 42
+        mock_overlay_instance.show.assert_called_once()
 
     @patch("td_executor.runtime.window.get_window_rect", return_value=None)
     def test_connect_by_hwnd_not_found(self, mock_get_rect: MagicMock) -> None:

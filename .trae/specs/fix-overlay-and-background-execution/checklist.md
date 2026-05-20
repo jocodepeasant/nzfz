@@ -1,0 +1,12 @@
+- [x] app.py 先调用 focus_force() 再调用 overlay.show()
+- [x] overlay.show() 先 SetWindowPos(SWP_NOACTIVATE) 再 ShowWindow(SW_SHOWNOACTIVATE)
+- [x] send_click 使用 ClientToScreen → ScreenToClient 双重坐标转换
+- [x] send_click 坐标相对于目标窗口客户区
+- [x] click_at/click_slot/press_key 传入 game_hwnd 参数
+- [x] ensure_map_open 传入 game_hwnd
+- [x] overlay 每 500ms 同步窗口位置
+- [x] overlay 窗口移动时自动跟随
+- [x] 窗口无效时 overlay 自动隐藏
+- [x] 开发模式显示窗口标题+hwnd 信息
+- [x] 开发模式显示操作日志
+- [x] 所有测试通过

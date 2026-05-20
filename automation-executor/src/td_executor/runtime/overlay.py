@@ -105,6 +105,10 @@ if sys.platform == "win32":
             elif msg == WM_TIMER:
                 if overlay is not None:
                     timer_id = wparam
+                    if timer_id == 9999:
+                        if overlay._hwnd_overlay:
+                            overlay._sync_position()
+                        return 0
                     user32.KillTimer(hwnd, timer_id)
                     if timer_id in overlay._timer_ids:
                         overlay._timer_ids.remove(timer_id)
@@ -160,8 +164,11 @@ if sys.platform == "win32":
             self._click_marker: tuple[int, int] | None = None
             self._key_text: str | None = None
             self._next_timer_id: int = 1
+            self._last_rect: tuple[int, int, int, int] | None = None
+            self._debug_info: str = ""
+            self._log_lines: list[str] = []
 
-        def show(self, hwnd: int) -> bool:
+        def show(self, hwnd: int, window_info: str = "") -> bool:
             if self._hwnd_overlay:
                 self.hide()
             if not _ensure_class_registered():
@@ -189,14 +196,50 @@ if sys.platform == "win32":
                 return False
             self._hwnd_overlay = hwnd_overlay
             _overlay_instances[hwnd_overlay] = self
+            self._debug_info = window_info
+            self._log_lines = []
+            self._last_rect = (x, y, w, h)
             user32.SetLayeredWindowAttributes(hwnd_overlay, COLOR_KEY, 0, LWA_COLORKEY)
             user32.SetWindowPos(
                 hwnd_overlay, -1,
-                0, 0, 0, 0,
+                x, y, w, h,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             )
             user32.ShowWindow(hwnd_overlay, 4)
+            self._start_sync_timer()
             return True
+
+        def _start_sync_timer(self) -> None:
+            if self._hwnd_overlay and sys.platform == "win32":
+                user32.SetTimer(self._hwnd_overlay, 9999, 500, None)
+                self._timer_ids.append(9999)
+                self._timer_actions[9999] = "sync"
+
+        def _sync_position(self) -> None:
+            if not self._hwnd_target or not self._hwnd_overlay:
+                return
+            if not user32.IsWindow(self._hwnd_target):
+                self.hide()
+                return
+            rect = _RECT()
+            if not user32.GetClientRect(self._hwnd_target, ctypes.byref(rect)):
+                self.hide()
+                return
+            pt = _POINT(rect.left, rect.top)
+            user32.ClientToScreen(self._hwnd_target, ctypes.byref(pt))
+            x, y = pt.x, pt.y
+            w, h = rect.right - rect.left, rect.bottom - rect.top
+            if self._last_rect != (x, y, w, h):
+                self._last_rect = (x, y, w, h)
+                user32.SetWindowPos(self._hwnd_overlay, -1, x, y, w, h, 0x0040 | 0x0001 | 0x0002 | 0x0010)
+
+        def log_operation(self, msg: str) -> None:
+            if not self._hwnd_overlay:
+                return
+            self._log_lines.append(msg)
+            if len(self._log_lines) > 20:
+                self._log_lines.pop(0)
+            user32.InvalidateRect(self._hwnd_overlay, None, True)
 
         def hide(self) -> bool:
             if not self._hwnd_overlay:
@@ -211,6 +254,9 @@ if sys.platform == "win32":
             self._hwnd_target = 0
             self._click_marker = None
             self._key_text = None
+            self._last_rect = None
+            self._debug_info = ""
+            self._log_lines = []
             return bool(result)
 
         def draw_click_marker(self, x: int, y: int, duration_ms: int = 1500) -> None:
@@ -268,6 +314,32 @@ if sys.platform == "win32":
             gdi32.SelectObject(hdc, old_pen)
             gdi32.SelectObject(hdc, old_brush)
             gdi32.DeleteObject(border_pen)
+            if self._debug_info:
+                font = gdi32.CreateFontW(-14, 0, 0, 0, 700, 0, 0, 0, 1, 0, 0, 0, 0, "Microsoft YaHei")
+                old_font = gdi32.SelectObject(hdc, font)
+                gdi32.SetBkMode(hdc, 1)
+                buf = ctypes.create_unicode_buffer(self._debug_info)
+                text_len = len(self._debug_info)
+                gdi32.SetTextColor(hdc, 0x00FFFF)
+                gdi32.TextOutW(hdc, 4, 4, buf, text_len)
+                gdi32.SelectObject(hdc, old_font)
+                gdi32.DeleteObject(font)
+            if self._log_lines:
+                font = gdi32.CreateFontW(-12, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, "Consolas")
+                old_font = gdi32.SelectObject(hdc, font)
+                gdi32.SetBkMode(hdc, 1)
+                bg_brush_log = gdi32.CreateSolidBrush(0)
+                gdi32.FillRect(hdc, ctypes.byref(_RECT(0, rect.bottom - min(len(self._log_lines)*16, rect.bottom//2), rect.right, rect.bottom)), bg_brush_log)
+                gdi32.DeleteObject(bg_brush_log)
+                y_offset = rect.bottom - 16
+                for line in reversed(self._log_lines):
+                    line_buf = ctypes.create_unicode_buffer(line[:80])
+                    line_len = len(line_buf) - 1
+                    gdi32.SetTextColor(hdc, 0x00FF00)
+                    gdi32.TextOutW(hdc, 4, y_offset - 16, line_buf, line_len)
+                    y_offset -= 16
+                gdi32.SelectObject(hdc, old_font)
+                gdi32.DeleteObject(font)
             if include_click:
                 click_pen = gdi32.CreatePen(0, 2, 0x0000FF)
                 old_click_pen = gdi32.SelectObject(hdc, click_pen)
@@ -305,12 +377,18 @@ else:
             self._hwnd_overlay: int = 0
             self._hwnd_target: int = 0
             self._timer_ids: list[int] = []
+            self._last_rect: tuple[int, int, int, int] | None = None
+            self._debug_info: str = ""
+            self._log_lines: list[str] = []
 
-        def show(self, hwnd: int) -> bool:
+        def show(self, hwnd: int, window_info: str = "") -> bool:
             return True
 
         def hide(self) -> bool:
             return True
+
+        def log_operation(self, msg: str) -> None:
+            pass
 
         def draw_click_marker(self, x: int, y: int, duration_ms: int = 1500) -> None:
             pass
