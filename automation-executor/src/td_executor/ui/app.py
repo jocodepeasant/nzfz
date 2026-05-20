@@ -122,7 +122,7 @@ class ExecutorApp(tk.Tk):
         self.focus_force()
         from td_executor.runtime.overlay import WindowOverlay
         self._overlay = WindowOverlay()
-        self._overlay.show(rect.hwnd, window_title=info)
+        self._overlay.show(rect.hwnd, window_info=info)
         return True
 
     def disconnect_window(self) -> None:
