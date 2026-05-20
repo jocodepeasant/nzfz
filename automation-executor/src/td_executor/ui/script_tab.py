@@ -91,6 +91,13 @@ class ScriptTab(ttk.Frame):
         )
         if path:
             self._path_var.set(path)
+            # 选择文件后自动加载脚本数据并显示预览，免去手动点击校验的步骤
+            try:
+                self._script_data = load_script_file(Path(path))
+                self._show_preview(self._script_data)
+            except Exception as e:
+                self._script_data = None
+                messagebox.showerror("加载失败", str(e))
 
     def _on_validate(self) -> None:
         path = self._path_var.get().strip()
@@ -102,14 +109,14 @@ class ScriptTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("加载失败", str(e))
             return
+        self._script_data = data
+        self._show_preview(data)
         errors = validate_script_data(data)
         if errors:
             first = errors[0]
-            messagebox.showerror("校验失败", f"{first['path']}: {first['message']}")
-            return
-        self._script_data = data
-        self._show_preview(data)
-        messagebox.showinfo("校验成功", "脚本校验通过")
+            messagebox.showwarning("校验未通过", f"{first['path']}: {first['message']}")
+        else:
+            messagebox.showinfo("校验成功", "脚本校验通过")
 
     def _show_preview(self, data: dict) -> None:
         map_name = data.get("map_name", "未知")
@@ -166,8 +173,17 @@ class ScriptTab(ttk.Frame):
 
     def _on_start(self) -> None:
         if self._script_data is None:
-            messagebox.showerror("错误", "请先校验脚本")
-            return
+            # 允许未校验时自动从路径加载脚本，提升操作便捷性
+            path = self._path_var.get().strip()
+            if not path:
+                messagebox.showerror("错误", "请先选择脚本文件")
+                return
+            try:
+                self._script_data = load_script_file(Path(path))
+                self._show_preview(self._script_data)
+            except Exception as e:
+                messagebox.showerror("加载失败", str(e))
+                return
         title_keyword = self._title_var.get().strip()
         if not title_keyword:
             messagebox.showerror("错误", "请输入窗口标题关键字")

@@ -246,8 +246,9 @@ class TestReadResource:
         cap = _make_capture()
         rect = _make_rect()
         rois = {}
-        result = read_resource(cap, rect, rois)
-        assert result is None
+        with patch("td_executor.vision.ocr.read_digits_roi", return_value="500"):
+            result = read_resource(cap, rect, rois)
+            assert result == 500
 
     def test_empty_string(self) -> None:
         cap = _make_capture()

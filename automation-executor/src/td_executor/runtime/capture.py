@@ -111,7 +111,7 @@ class ScreenCapture:
             monitor = mss_inst.monitors[0]
         shot = mss_inst.grab(monitor)
         img = np.array(shot, dtype=np.uint8)
-        if shot.mode == "RGBA":
+        if img.shape[2] == 4:
             img = img[:, :, :3]
         if self._config.output_format == "bgr":
             pass

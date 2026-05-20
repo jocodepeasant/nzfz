@@ -141,7 +141,8 @@ def read_resource(
 ) -> int | None:
     roi = rois.get("resource")
     if roi is None:
-        return None
+        logger.warning("未配置 resource ROI，降级为整个游戏窗口读取")
+        roi = {"x_ratio": 0, "y_ratio": 0, "w_ratio": 1, "h_ratio": 1}
     if multi_frame is not None and "resource_frames" in multi_frame:
         n_frames = multi_frame["resource_frames"]
         results: list[str] = []
