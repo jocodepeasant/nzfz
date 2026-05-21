@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nzfz-executor"
+version = "0.1.0"
+description = "逆战塔防自动化脚本执行器（新架构）"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "jsonschema>=4.23.0",
+  "typer>=0.12.5",
+  "rich>=13.7.0,<14",
+]
+
+[project.optional-dependencies]
+runtime = [
+  "numpy>=2.0.0",
+  "opencv-python-headless>=4.10.0",
+  "mss>=9.0.0",
+  "loguru>=0.7.2",
+]
+input = [
+  "pynput>=1.7.7",
+  "pyautogui>=0.9.54",
+]
+ocr = [
+  "paddleocr>=2.8.0",
+]
+ui = [
+  "Pillow>=10.0.0",
+  "PySide6>=6.6",
+]
+dev = [
+  "pytest>=8.0.0",
+  "ruff>=0.5.0",
+]
+
+[project.scripts]
+nzfz-executor = "nzfz_executor.cli:main"
+
+[tool.setuptools.packages.find]
+where = [".."]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
