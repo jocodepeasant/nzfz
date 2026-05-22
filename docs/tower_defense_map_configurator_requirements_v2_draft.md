@@ -95,7 +95,7 @@ x{ratio} = \frac{px - left}{width},\quad y{ratio} = \frac{py - top}{height}
 | 区域 Region | `regions[]` + `enter_actions`  | 折线/多段 pan 后续可做；V1 仍为 `pan_map` 序列                   |
 | 槽位 Slot   | `slots[]`                      | 绑定 `region_id`、`trap_id` 默认、校验区 `verify.check_area` |
 | ROI       | `recognition.rois`             | 矩形框在底图/窗口示意层上画，导出比例                                 |
-| 陷阱定义      | `traps[]`                      | 键位、花费、升级模式等                                         |
+| 陷阱定义      | `traps[]`（导出写入 `export/script.json`） | 编辑器侧维护于 **map-configurator/traps/**（应用级，非工程目录）；导出时合并花费/升级等；可选 `recognition_template` |
 | 波次        | `waves[]`                      | `trigger` + 有序 `actions`                            |
 | 动作        | `actions[]` 内 `type` 分支        | place / upgrade / remove / pan_to_region / log 等    |
 | 条件 / 重试   | `conditions`、`retry`、`on_fail` | MVP 先覆盖文档已有字段                                       |
@@ -162,18 +162,21 @@ x{ratio} = \frac{px - left}{width},\quad y{ratio} = \frac{py - top}{height}
 ### 5.1 建议目录（配置器工程，非脚本必须）
 
 ```text
-MyMap.nzmap/   （实际可为任意文件夹名）
-├── project.json          # 编辑器状态：底图路径、标定、视图缩放、选中对象 ID
+MyMap.nzmap/   （用户工程，实际可为任意文件夹名）
+├── project.json          # 楼层、标定、槽位默认等；不含 traps[]（陷阱库与工程解耦）
 ├── assets/
 │   ├── floor_1.png
-│   ├── floor_2.png
-│   └── verify_templates/ # 可选：从底图裁切的模板图
+│   └── floor_2.png
 └── export/
     └── script.json       # 导出给执行器（通过 Schema 校验）
+
+map-configurator/   （应用安装/开发目录，与上述工程无关）
+├── traps/                  # 陷阱定义 traps/{trap_id}.json
+└── assets/verify_templates/  # 陷阱识别图 trap_{trap_id}.*
 ```
 
-- `**project.json**`：允许包含执行器**不需要**的字段（仅配置器使用），导出时剥离或写入 `metadata`。
-- `**export/script.json`**：必须满足 Schema；CI 与配置器内置「导出前校验」。
+- `**project.json**`：允许包含执行器**不需要**的字段（仅配置器使用）；**陷阱库不写入** `project.json`，保存时剥离 `traps`。
+- `**export/script.json`**：必须满足 Schema；`traps[]` 来自应用陷阱库；若陷阱配置了识别图，对应项含可选字段 `recognition_template`（路径相对 **map-configurator** 根，如 `assets/verify_templates/trap_trap_a.png`）。配置器 UI 不编辑 `select_key`/`upgrade_key` 时，导出默认均为 `"1"`。CI 与配置器内置「导出前校验」。
 
 ### 5.2 与 Git 协作
 
@@ -322,7 +325,7 @@ MyMap.nzmap/   （实际可为任意文件夹名）
 | M4 | **标定** | `map_content_rect` 或等价四角框选；写入 `map.calibration`；预览映射 | **P1** | P0 可先「整图即地图」简化，有偏差再上 |
 | M5 | **槽位 Slot** | 底图上放点；侧栏编辑 `slot_id`、`name`、`region_id`、`default_trap`、`floor_id`；删除 / 列表 | **P0** | 依赖 M3、M6 |
 | M6 | **区域 Region** | 表格 CRUD；`enter_actions` 至少 0～1 段 `pan_map` 表单或 JSON | **P0** | 先于或与 M5 并行 |
-| M7 | **陷阱 Traps** | `traps[]` 表格：键位、花费、升级模式说明（`all_same_type` 文案） | **P0** | 供 M8 下拉引用 |
+| M7 | **陷阱 Traps** | 应用级陷阱库全页：`traps/{trap_id}.json` + 识别图；导出 `traps[]`（花费、升级模式；可选 `recognition_template`；键位 UI 省略时导出默认 `1`） | **P0** | 供槽位/波次下拉；与工程目录解耦 |
 | M8 | **识别 ROI** | V1 五类 ROI 矩形编辑；导出 `recognition.rois` | **P0** | 可与底图画布分屏或标签页 |
 | M8b | **UI 文案 ROI** | `ui_text_primary` / `ui_text_secondary`；可选多实例 `ui_text_slots[]` | **P1**（先主区） / **P2**（多实例 Schema） | 与 §9.1 一致 |
 | M9 | **波次与动作** | `wave_eq` 触发；动作链：`pan_to_region`、`place_trap`、`log` | **P0** | 动作矩阵 §3.1 |

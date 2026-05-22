@@ -1,6 +1,6 @@
 # 地图配置器 P0 实现说明
 
-> **状态**：P0 已在 `map-configurator` 源码中落地（主进程 `project-fs` + Tab 化 UI）。下文保留为模块与 IPC 对照清单。
+> **状态**：P0 已在 `map-configurator` 源码中落地（单页工作台 + 应用级陷阱库）。下文为模块与 IPC 对照清单；陷阱库见 `trap-fs.ts` / `window.trapApi`。
 
 > ~~当前会话处于 **Plan mode**~~（已过时）
 
@@ -8,7 +8,9 @@
 
 ## 1. 主进程：`src/main/project-fs.ts`（新建）
 
-职责：`resolveSafe`、创建 `assets/`、`export/`、读写 `project.json`、读写 `export/script.json`、导入楼层图到 `assets/floor_1.*`、按相对路径读二进制转 base64。
+职责：`resolveSafe`、创建工程 `assets/`、`export/`、读写 `project.json`（**不含** `traps`）、读写 `export/script.json`、导入楼层图到 `assets/floor_{id}.*`、按相对路径读二进制转 base64。
+
+陷阱库（应用目录，见 `trap-fs.ts` + `app-paths.ts`）：`traps/*.json`、`assets/verify_templates/`、IPC `trap-*`（`trap-list-definitions`、`trap-sync-definitions`、`trap-import-recognition-image`、`trap-read-file-base64`）。
 
 要点：
 
@@ -30,9 +32,15 @@
 | `project-import-floor-image` | `projectRoot` | `importFloorImage` |
 | `project-read-file-base64` | `projectRoot`, `relativePath: string` | `readFileBase64` |
 
+| `trap-list-definitions` | 无 | 读 `map-configurator/traps/*.json` |
+| `trap-sync-definitions` | `traps[]`, `previousTrapIds[]` | 写盘并删孤儿 |
+| `trap-import-recognition-image` | `trapId` | 写入 `assets/verify_templates/trap_{id}.*` |
+| `trap-read-file-base64` | `relativePath`（相对应用根） | 识别图预览 |
+| `trap-file-exists` | `relativePath` | 同上 |
+
 ## 3. 预加载：`src/preload/index.ts`
 
-`contextBridge.exposeInMainWorld('projectApi', { ... })`，封装上述 invoke。
+`contextBridge.exposeInMainWorld('projectApi', { ... })` 与 `trapApi`（陷阱库，无 `projectRoot`），分别封装上述 invoke。
 
 ## 4. 渲染：`src/renderer/src/env.d.ts`
 
@@ -53,9 +61,9 @@
 - **工程**：选目录、`project.json` 读写、显示当前 `projectRoot`；新建时 `ensureProjectDirs` + 默认 `project.json`（含 `floorImageRelative`）。
 - **元数据**：绑定 `script_id`、`script_name`、`map.*`、`metadata.author`、`metadata.game_version`（可选）。
 - **地图**：导入楼层图 → 存 `assets/floor_1.png`；`img` 的 `src` 用 `data:image/...;base64,`（经 `project-read-file-base64`）；点击图像在**图像像素坐标**上换算 `x_ratio/y_ratio`（相对图片宽高 0–1），追加 `slots` 默认项（`precision`、`verify.check_area` 可抄示例 JSON）。
-- **区域 / 陷阱 / ROI**：表格编辑 `regions[]`、`traps[]`、`recognition.rois`。
+- **区域 / ROI / 波次**：Inspector 编辑 `regions[]`、`recognition.rois`、`waves[]`；**陷阱**在顶栏全页「陷阱库」（应用目录）。
 - **波次**：`wave` + `trigger wave_eq` + `actions` 列表；动作类型 `pan_to_region` | `place_trap` | `log` 的表单字段。
-- **导出**：`JSON.stringify(script, null, 2)` → `validate-script` → `project-write-export-script`；保留原「另存为」单文件 `save-script-file` 可选。
+- **导出**：`buildScriptForExport(script, project)` 合并多楼层 `map`、应用陷阱库 `trapsForExport`（含可选 `recognition_template`）→ `validate-script` → `project-write-export-script`；另存为仍用 `save-script-file`。
 
 ## 7. 依赖
 

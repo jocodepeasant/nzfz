@@ -36,6 +36,13 @@ Electron + Vite + React + TypeScript。开发时从本目录运行 `npm run dev`
 
 **导出前**：配置 `place_trap` 前请先至少有一个 **slot**，否则校验可能失败。
 
+### 导出 `export/script.json` 与陷阱库
+
+- **Schema**：仍为 `schemas/tower_defense_script_v1.schema.json`（`schema_version` 等顶层结构未变）。
+- **`traps[]` 来源**：应用启动时从 `map-configurator/traps/*.json` 加载；导出时经 `buildScriptForExport` 写入工程 `export/script.json`，**不**从用户工程的 `project.json` 或工程内 `traps/` 读取。
+- **陷阱项字段**：必填仍为 `trap_id`、`trap_name`、`select_key`、`upgrade_key`、`upgrade_hold_ms`、`cost`、`upgrade_cost`、`max_level`、`upgrade_mode`。编辑器表单不填键位时，导出 `select_key` / `upgrade_key` 均为 `"1"`。
+- **`recognition_template`（可选）**：陷阱库中配置了识别图时，导出项增加该字段，值为相对 **map-configurator 根** 的路径（如 `assets/verify_templates/trap_trap_a.png`）。执行器加载脚本时需按部署方式解析该路径（与工程 `assets/` 无关）。
+
 ## 命令
 
 - `npm run dev` — 开发调试
