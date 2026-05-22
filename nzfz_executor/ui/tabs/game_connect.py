@@ -12,9 +12,9 @@ from PySide6.QtWidgets import (
     QHeaderView, QMessageBox, QSizePolicy,
 )
 
-from nzfz_executor.core.window_manager import (
-    WindowInfo, HealthStatus,
-    search_windows, connect_window, disconnect_window, check_health,
+from nzfz_executor.core.window_manager import WindowManager
+from nzfz_executor.core.models import (
+    WindowInfo, HealthStatus, ConnectResult, HealthCheckResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,40 +39,49 @@ class ConnectWorker(QThread):
     """连接工作线程，在后台执行窗口连接操作，避免阻塞 UI 主线程。
 
     信号:
-        finished: 连接完成信号，携带 (成功标志, 错误信息)
+        finished: 连接完成信号，携带 ConnectResult 对象
     """
 
-    finished = Signal(bool, str)
+    finished = Signal(ConnectResult)
     """连接完成信号
     Args:
-        success (bool): 连接是否成功
-        error (str): 错误信息，成功时为空字符串
+        result (ConnectResult): 连接操作结果
     """
 
-    def __init__(self, window: WindowInfo) -> None:
+    def __init__(self, manager: WindowManager, window: WindowInfo) -> None:
         """初始化连接工作线程。
 
         Args:
+            manager: 窗口管理器实例
             window: 目标窗口的信息数据对象
         """
         super().__init__()
+        self._manager = manager
+        """窗口管理器引用"""
         self._window = window
         """目标窗口信息"""
 
     def run(self) -> None:
         """在线程中执行连接操作。
 
-        调用 connect_window 尝试连接目标窗口，
-        成功时发射 finished(True, "")，异常时发射 finished(False, str(e))。
+        调用 WindowManager.connect_window 获取 ConnectResult，
+        成功或失败均通过 finished 信号传出。
         """
-        logger.info("后台线程开始连接窗口, title=%s, pid=%s", self._window.title, self._window.pid)
+        logger.info(
+            "后台线程开始连接窗口, title=%s, pid=%s",
+            self._window.title,
+            self._window.pid,
+        )
         try:
-            connect_window(self._window)
-            self.finished.emit(True, "")
-            logger.info("后台线程连接窗口成功")
+            result = self._manager.connect_window(self._window)
+            self.finished.emit(result)
+            logger.info(
+                "后台线程连接窗口完成, success=%s",
+                result.success,
+            )
         except Exception as e:
-            logger.error("后台线程连接窗口异常: %s", e)
-            self.finished.emit(False, str(e))
+            logger.exception("后台线程连接窗口异常")
+            self.finished.emit(ConnectResult.fail(str(e)))
 
 
 class GameConnectTab(QWidget):
@@ -84,6 +93,9 @@ class GameConnectTab(QWidget):
     def __init__(self) -> None:
         """初始化游戏连接页签，构建全部 UI 区块并设置初始状态。"""
         super().__init__()
+
+        self._window_manager = WindowManager()
+        """窗口管理器实例，提供窗口搜索、连接、断连及健康检测能力"""
 
         self._state: ConnectState = ConnectState.DISCONNECTED
         """当前连接状态"""
@@ -270,7 +282,7 @@ class GameConnectTab(QWidget):
     def _on_search(self) -> None:
         """搜索按钮点击处理。
 
-        根据输入关键词调用 search_windows 获取匹配窗口列表，
+        根据输入关键词调用 WindowManager.search_windows 获取匹配窗口列表，
         清空并重新填充结果表格。无结果时显示占位提示行。
         """
         keyword = self._search_input.text().strip()
@@ -279,8 +291,12 @@ class GameConnectTab(QWidget):
             return
 
         logger.info("触发窗口搜索, keyword=%s", keyword)
-        self._search_results = search_windows(keyword)
-        logger.info("窗口搜索完成, keyword=%s, 结果数量=%d", keyword, len(self._search_results))
+        self._search_results = self._window_manager.search_windows(keyword)
+        logger.info(
+            "窗口搜索完成, keyword=%s, 结果数量=%d",
+            keyword,
+            len(self._search_results),
+        )
 
         self._result_table.setRowCount(0)
 
@@ -329,12 +345,20 @@ class GameConnectTab(QWidget):
 
         row = selected_rows[0].row()
         if row < 0 or row >= len(self._search_results):
-            logger.warning("选中行索引越界, row=%d, results=%d", row, len(self._search_results))
+            logger.warning(
+                "选中行索引越界, row=%d, results=%d",
+                row,
+                len(self._search_results),
+            )
             return
 
         window_info = self._search_results[row]
-        logger.info("发起连接请求, title=%s, pid=%s, 当前状态=%s",
-                     window_info.title, window_info.pid, self._state.value)
+        logger.info(
+            "发起连接请求, title=%s, pid=%s, 当前状态=%s",
+            window_info.title,
+            window_info.pid,
+            self._state.value,
+        )
 
         if self._state in (ConnectState.CONNECTED, ConnectState.ABNORMAL):
             reply = QMessageBox.question(
@@ -361,7 +385,11 @@ class GameConnectTab(QWidget):
         Args:
             window_info: 目标窗口信息
         """
-        logger.info("开始执行连接流程, title=%s, pid=%s", window_info.title, window_info.pid)
+        logger.info(
+            "开始执行连接流程, title=%s, pid=%s",
+            window_info.title,
+            window_info.pid,
+        )
 
         self._set_status(ConnectState.CONNECTING)
         self._connect_btn.setEnabled(False)
@@ -377,7 +405,7 @@ class GameConnectTab(QWidget):
         self._timeout_timer.start()
         logger.debug("连接超时计时器已启动, timeout=5s")
 
-        self._worker = ConnectWorker(window_info)
+        self._worker = ConnectWorker(self._window_manager, window_info)
         self._worker.finished.connect(self._on_connect_finished)
         self._worker.start()
         logger.debug("连接工作线程已启动")
@@ -396,17 +424,20 @@ class GameConnectTab(QWidget):
 
         self._set_status(ConnectState.TIMEOUT)
 
-    def _on_connect_finished(self, success: bool, error: str) -> None:
+    def _on_connect_finished(self, result: ConnectResult) -> None:
         """连接完成回调，由后台工作线程触发。
 
         Args:
-            success: 连接是否成功
-            error: 错误信息，成功时为空字符串
+            result: 连接操作结果
         """
         self._timeout_timer.stop()
-        logger.debug("连接完成回调触发, success=%s, error=%s", success, error)
+        logger.debug(
+            "连接完成回调触发, success=%s, error=%s",
+            result.success,
+            result.error_message,
+        )
 
-        if success:
+        if result.success:
             self._current_window = self._worker._window  # type: ignore[union-attr]
             self._set_status(ConnectState.CONNECTED)
 
@@ -427,9 +458,13 @@ class GameConnectTab(QWidget):
             logger.info("连接成功，健康检测定时器已启动, interval=1s")
         else:
             self._set_status(ConnectState.DISCONNECTED)
-            err_msg = f"连接失败：{error}" if error else "连接失败"
+            err_msg = (
+                f"连接失败：{result.error_message}"
+                if result.error_message
+                else "连接失败"
+            )
             self._show_tip(err_msg)
-            logger.error("连接失败, error=%s", error)
+            logger.error("连接失败, error=%s", result.error_message)
 
         self._worker = None
 
@@ -448,7 +483,7 @@ class GameConnectTab(QWidget):
         self._health_timer.stop()
         logger.debug("健康检测定时器已停止")
 
-        disconnect_window()
+        self._window_manager.disconnect_window()
 
         self._current_window = None
         self._set_status(ConnectState.DISCONNECTED)
@@ -462,29 +497,32 @@ class GameConnectTab(QWidget):
         """健康检测回调，每秒触发一次。
 
         检测当前窗口连接的健康状态：
-        - 健康且非 ABNORMAL → 保持 CONNECTED
+        - HEALTHY 且非 ABNORMAL → 保持 CONNECTED
         - 从 ABNORMAL 恢复 → 切回 CONNECTED
-        - 健康状态异常 → 切为 ABNORMAL 并尝试重连
+        - 其他异常状态 → 切为 ABNORMAL
         """
-        status = check_health()
-        logger.debug("健康检测, status=%s", status.value)
+        health_result: HealthCheckResult = self._window_manager.check_health()
+        logger.debug("健康检测, status=%s", health_result.status.value)
 
-        if status == HealthStatus.HEALTHY:
+        if health_result.status == HealthStatus.HEALTHY:
             if self._state == ConnectState.ABNORMAL:
                 logger.info("连接从异常恢复, 切回已连接状态")
                 self._set_status(ConnectState.CONNECTED)
+        elif health_result.status == HealthStatus.NOT_CONNECTED:
+            logger.warning("健康检测发现未连接，停止定时器")
+            self._health_timer.stop()
+            self._current_window = None
+            self._set_status(ConnectState.DISCONNECTED)
+            self._window_info.clear()
+            self._window_info.setVisible(False)
         else:
-            if self._current_window is not None:
-                self._status_text.setText(f"连接异常：{status.value}")
-                self._set_status(ConnectState.ABNORMAL)
-                logger.warning("连接异常, status=%s, 尝试重连", status.value)
-
-                try:
-                    connect_window(self._current_window)
-                    logger.info("重连成功")
-                    self._set_status(ConnectState.CONNECTED)
-                except Exception as e:
-                    logger.error("重连失败: %s, 维持异常状态等待下一轮检测", e)
+            self._status_text.setText(f"连接异常：{health_result.message}")
+            self._set_status(ConnectState.ABNORMAL)
+            logger.warning(
+                "连接异常, status=%s, message=%s",
+                health_result.status.value,
+                health_result.message
+            )
 
     # ------------------------------------------------------------------
     #  状态管理方法
