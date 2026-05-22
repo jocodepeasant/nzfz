@@ -33,4 +33,5 @@ python -m td_executor run ../schemas/examples/space_station_normal_baseline_v1.j
 ## 设计文档
 
 - [`tower_defense_automation_design_v1.md`](tower_defense_automation_design_v1.md)
+- [`docs/executor_module_guide.md`](docs/executor_module_guide.md)（执行器模块深入理解：脚本协议、窗口连接链、旧版映射、P0 依赖）
 - [`docs/tower_defense_map_configurator_requirements_v2_draft.md`](docs/tower_defense_map_configurator_requirements_v2_draft.md)（地图配置器 V2 需求草案：画布、对象模型、楼层协议、MVP、E2E）
