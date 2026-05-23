@@ -5,6 +5,7 @@ from nzfz_executor.core.dispatcher import ActionDispatcher
 from nzfz_executor.core.pipeline import ExecutionPipeline
 from nzfz_executor.core.scheduler import WaveScheduler
 from nzfz_executor.core.window_manager import WindowManager
+from nzfz_executor.core.screenshot_manager import ScreenshotManager
 from nzfz_executor.core.models import (
     WindowRect,
     WindowInfo,
@@ -14,6 +15,10 @@ from nzfz_executor.core.models import (
     ConnectOptions,
     ConnectResult,
     HealthCheckResult,
+    CaptureRegion,
+    CaptureBackendType,
+    CaptureOptions,
+    ScreenshotResult,
 )
 
 __all__ = [
@@ -22,6 +27,7 @@ __all__ = [
     "ExecutionPipeline",
     "WaveScheduler",
     "WindowManager",
+    "ScreenshotManager",
     "WindowRect",
     "WindowInfo",
     "ConnectedWindow",
@@ -30,4 +36,8 @@ __all__ = [
     "ConnectOptions",
     "ConnectResult",
     "HealthCheckResult",
+    "CaptureRegion",
+    "CaptureBackendType",
+    "CaptureOptions",
+    "ScreenshotResult",
 ]
