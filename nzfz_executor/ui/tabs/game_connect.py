@@ -31,14 +31,24 @@ CONNECT_TIMEOUT_MS = 5000
 HEALTH_TIMEOUT_MS = 2000
 
 
-class ConnectState(str, Enum):
-    """连接状态枚举，描述当前与游戏窗口的连接状态。"""
+class SearchUiState(str, Enum):
+    """搜索区域 UI 状态。"""
+
+    IDLE = "idle"
+    SEARCHING = "searching"
+    EMPTY = "empty"
+    HAS_RESULT = "has_result"
+    ERROR = "error"
+
+
+class ConnectionUiState(str, Enum):
+    """连接生命周期 UI 状态。"""
 
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
-    CONNECTED = "connected"
-    ABNORMAL = "abnormal"
-    TIMEOUT = "timeout"
+    CONNECTED_READY = "connected_ready"
+    CONNECTED_NOT_READY = "connected_not_ready"
+    CONNECTED_UNHEALTHY = "connected_unhealthy"
 
 
 class GameConnectTab(QWidget):
@@ -57,7 +67,11 @@ class GameConnectTab(QWidget):
         self._task_runner.health_finished.connect(self._on_health_finished)
         self._task_runner.health_failed.connect(self._on_health_failed)
 
-        self._state: ConnectState = ConnectState.DISCONNECTED
+        self._search_state = SearchUiState.IDLE
+        self._connection_state = ConnectionUiState.DISCONNECTED
+        self._search_message = ""
+        self._connection_message = ""
+
         self._current_window: WindowInfo | None = None
         self._search_results: list[WindowInfo] = []
 
@@ -91,18 +105,21 @@ class GameConnectTab(QWidget):
         self._health_timeout_timers: dict[int, QTimer] = {}
 
         self._status_label: QLabel
+        self._search_status_label: QLabel
         self._search_input: QLineEdit
         self._search_btn: QPushButton
         self._result_table: QTableWidget
         self._connect_btn: QPushButton
         self._disconnect_btn: QPushButton
+        self._execute_btn: QPushButton
         self._indicator: QLabel
         self._status_text: QLabel
+        self._execute_status_label: QLabel
         self._window_info: QLabel
 
         self._init_ui()
-        self._update_button_states()
-        self._set_status(ConnectState.DISCONNECTED)
+        self._set_search_state(SearchUiState.IDLE, "请输入窗口标题、进程名或 PID")
+        self._set_connection_state(ConnectionUiState.DISCONNECTED)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.cleanup()
@@ -212,6 +229,192 @@ class GameConnectTab(QWidget):
             timer.deleteLater()
         self._health_timeout_timers.clear()
 
+    def _set_search_state(self, state: SearchUiState, message: str = "") -> None:
+        old_state = self._search_state
+        self._search_state = state
+        self._search_message = message
+        if old_state != state:
+            logger.info("搜索状态变更: %s → %s", old_state.value, state.value)
+        self._apply_ui_state()
+
+    def _set_connection_state(
+        self,
+        state: ConnectionUiState,
+        message: str = "",
+    ) -> None:
+        old_state = self._connection_state
+        self._connection_state = state
+        self._connection_message = message
+        if old_state != state:
+            logger.info("连接状态变更: %s → %s", old_state.value, state.value)
+        self._apply_ui_state()
+
+    def _is_connected_state(self) -> bool:
+        return self._connection_state in {
+            ConnectionUiState.CONNECTED_READY,
+            ConnectionUiState.CONNECTED_NOT_READY,
+            ConnectionUiState.CONNECTED_UNHEALTHY,
+        }
+
+    def _get_selected_window_info(self) -> WindowInfo | None:
+        selected_rows = self._result_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return None
+        row = selected_rows[0].row()
+        if row < 0 or row >= len(self._search_results):
+            return None
+        return self._search_results[row]
+
+    def _apply_ui_state(self) -> None:
+        selected_window = self._get_selected_window_info()
+
+        is_connecting = self._connection_state == ConnectionUiState.CONNECTING
+        is_searching = self._search_state == SearchUiState.SEARCHING
+
+        can_connect = (
+            not is_connecting
+            and not is_searching
+            and self._search_state == SearchUiState.HAS_RESULT
+            and selected_window is not None
+            and not selected_window.is_minimized
+        )
+
+        can_disconnect = self._connection_state in {
+            ConnectionUiState.CONNECTED_READY,
+            ConnectionUiState.CONNECTED_NOT_READY,
+            ConnectionUiState.CONNECTED_UNHEALTHY,
+        }
+
+        can_execute = self._connection_state == ConnectionUiState.CONNECTED_READY
+
+        self._search_input.setEnabled(not is_connecting)
+        self._search_btn.setEnabled(not is_connecting and not is_searching)
+        self._result_table.setEnabled(not is_connecting)
+
+        self._connect_btn.setEnabled(can_connect)
+        self._disconnect_btn.setEnabled(can_disconnect)
+        self._execute_btn.setEnabled(can_execute)
+
+        self._window_info.setVisible(self._is_connected_state())
+
+        self._update_search_status_label()
+        self._update_connection_status_label()
+        self._update_execute_status_label()
+
+    def _update_search_status_label(self) -> None:
+        if self._search_message:
+            text = self._search_message
+        else:
+            defaults = {
+                SearchUiState.IDLE: "请输入关键词搜索窗口",
+                SearchUiState.SEARCHING: "正在搜索窗口",
+                SearchUiState.EMPTY: "未找到匹配窗口",
+                SearchUiState.HAS_RESULT: "已找到窗口",
+                SearchUiState.ERROR: "搜索失败或超时",
+            }
+            text = defaults.get(self._search_state, "")
+        self._search_status_label.setText(text)
+
+    def _update_connection_status_label(self) -> None:
+        color_map = {
+            ConnectionUiState.DISCONNECTED: "#f38ba8",
+            ConnectionUiState.CONNECTING: "#f9e2af",
+            ConnectionUiState.CONNECTED_READY: "#a6e3a1",
+            ConnectionUiState.CONNECTED_NOT_READY: "#a6e3a1",
+            ConnectionUiState.CONNECTED_UNHEALTHY: "#f9e2af",
+        }
+
+        text_map = {
+            ConnectionUiState.DISCONNECTED: "未连接",
+            ConnectionUiState.CONNECTING: "正在连接",
+            ConnectionUiState.CONNECTED_READY: "已连接",
+            ConnectionUiState.CONNECTED_NOT_READY: "已连接",
+            ConnectionUiState.CONNECTED_UNHEALTHY: "连接异常",
+        }
+
+        state = self._connection_state
+        color = color_map.get(state, "#f38ba8")
+        self._indicator.setStyleSheet(
+            f"QLabel#status_indicator {{"
+            f"  background-color: {color};"
+            f"  border-radius: 8px;"
+            f"  min-width: 16px;"
+            f"  min-height: 16px;"
+            f"}}"
+        )
+
+        if self._connection_message:
+            self._status_text.setText(self._connection_message)
+        else:
+            self._status_text.setText(text_map.get(state, "未连接"))
+
+    def _update_execute_status_label(self) -> None:
+        execute_map = {
+            ConnectionUiState.DISCONNECTED: "执行未就绪",
+            ConnectionUiState.CONNECTING: "执行未就绪",
+            ConnectionUiState.CONNECTED_READY: "执行就绪",
+            ConnectionUiState.CONNECTED_NOT_READY: "窗口未在前台",
+            ConnectionUiState.CONNECTED_UNHEALTHY: "执行未就绪",
+        }
+        self._execute_status_label.setText(
+            execute_map.get(self._connection_state, "执行未就绪")
+        )
+
+    def _apply_health_result(self, result: HealthCheckResult) -> None:
+        if not result.is_connected:
+            self._set_connection_state(
+                ConnectionUiState.DISCONNECTED,
+                "未连接游戏窗口",
+            )
+            return
+
+        if result.is_healthy and result.is_ready:
+            self._set_connection_state(
+                ConnectionUiState.CONNECTED_READY,
+                "已连接，执行就绪",
+            )
+            return
+
+        if result.is_healthy and not result.is_ready:
+            message = result.message or "已连接，但窗口未在前台"
+            self._set_connection_state(
+                ConnectionUiState.CONNECTED_NOT_READY,
+                message,
+            )
+            return
+
+        self._set_connection_state(
+            ConnectionUiState.CONNECTED_UNHEALTHY,
+            result.message or "连接异常",
+        )
+
+    def _confirm_switch_connection(self, window_info: WindowInfo) -> bool:
+        reply = QMessageBox.question(
+            self,
+            "切换连接窗口",
+            "当前已连接其他窗口，继续操作将断开当前连接并连接所选窗口。是否继续？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+    def _disconnect_for_switch(self) -> None:
+        self._stop_health_timer()
+
+        self._active_connect_request_id = 0
+        self._active_health_request_id = 0
+
+        self._connecting = False
+        self._health_check_running = False
+
+        self._connect_request_generations.clear()
+        self._health_request_generations.clear()
+
+        self._clear_connect_timeouts()
+        self._clear_health_timeouts()
+
+        self._window_manager.disconnect_window()
+
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
@@ -247,6 +450,9 @@ class GameConnectTab(QWidget):
 
         section.addLayout(search_row)
 
+        self._search_status_label = QLabel()
+        section.addWidget(self._search_status_label)
+
         self._result_table = QTableWidget(0, 4)
         self._result_table.setHorizontalHeaderLabels(["窗口标题", "进程名", "PID", "状态"])
         self._result_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -275,6 +481,10 @@ class GameConnectTab(QWidget):
         self._disconnect_btn.clicked.connect(self._on_disconnect)
         row.addWidget(self._disconnect_btn)
 
+        self._execute_btn = QPushButton("开始执行")
+        self._execute_btn.setEnabled(False)
+        row.addWidget(self._execute_btn)
+
         row.addStretch()
         section.addLayout(row)
         return section
@@ -296,6 +506,9 @@ class GameConnectTab(QWidget):
 
         row.addStretch()
         section.addLayout(row)
+
+        self._execute_status_label = QLabel()
+        section.addWidget(self._execute_status_label)
 
         self._window_info = QLabel()
         self._window_info.setVisible(False)
@@ -336,8 +549,11 @@ class GameConnectTab(QWidget):
     def _handle_empty_keyword(self) -> None:
         self._invalidate_search()
         self._clear_search_results()
+        self._set_search_state(
+            SearchUiState.IDLE,
+            "请输入窗口标题、进程名或 PID",
+        )
         self._show_tip("请输入窗口标题、进程名或 PID")
-        self._update_button_states()
 
     def _start_search(self, keyword: str) -> None:
         keyword = keyword.strip()
@@ -351,7 +567,8 @@ class GameConnectTab(QWidget):
         request_id = self._search_request_id
         self._active_search_request_id = request_id
         self._search_running = True
-        self._update_button_states()
+
+        self._set_search_state(SearchUiState.SEARCHING, "正在搜索窗口...")
 
         self._start_search_timeout(request_id)
         logger.info("触发异步窗口搜索, keyword=%s, request_id=%s", keyword, request_id)
@@ -370,8 +587,16 @@ class GameConnectTab(QWidget):
             request_id,
             len(results),
         )
-        self._fill_search_results(results)
-        self._update_button_states()
+
+        if results:
+            self._fill_search_results(results)
+            self._set_search_state(
+                SearchUiState.HAS_RESULT,
+                f"找到 {len(results)} 个窗口",
+            )
+        else:
+            self._clear_search_results()
+            self._set_search_state(SearchUiState.EMPTY, "未找到匹配窗口")
 
     def _on_search_failed(self, request_id: int, message: str) -> None:
         self._stop_search_timeout(request_id)
@@ -382,8 +607,9 @@ class GameConnectTab(QWidget):
 
         self._search_running = False
         logger.error("窗口搜索异常, request_id=%s, error=%s", request_id, message)
+        self._clear_search_results()
+        self._set_search_state(SearchUiState.ERROR, f"搜索失败：{message}")
         self._show_tip(f"搜索失败：{message}")
-        self._update_button_states()
 
     def _on_search_timeout(self, request_id: int) -> None:
         self._stop_search_timeout(request_id)
@@ -392,8 +618,12 @@ class GameConnectTab(QWidget):
             return
 
         self._invalidate_search()
+        self._clear_search_results()
+        self._set_search_state(
+            SearchUiState.ERROR,
+            "搜索窗口超时，请稍后重试",
+        )
         self._show_tip("搜索窗口超时，请稍后重试")
-        self._update_button_states()
 
     def _clear_search_results(self) -> None:
         self._search_results = []
@@ -404,11 +634,6 @@ class GameConnectTab(QWidget):
         self._result_table.setRowCount(0)
 
         if not self._search_results:
-            self._result_table.setRowCount(1)
-            self._result_table.setSpan(0, 0, 1, 4)
-            empty_item = QTableWidgetItem("无匹配结果")
-            empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._result_table.setItem(0, 0, empty_item)
             return
 
         self._search_results.sort(key=lambda w: w.match_score, reverse=True)
@@ -428,41 +653,30 @@ class GameConnectTab(QWidget):
             self._result_table.setItem(i, 3, status_item)
 
     def _on_selection_changed(self) -> None:
-        self._update_button_states()
+        selected = self._get_selected_window_info()
+        if selected is not None and selected.is_minimized:
+            self._show_tip("窗口已最小化，请恢复窗口后重试")
+        self._apply_ui_state()
 
     def _on_connect(self) -> None:
-        if self._connecting or self._search_running:
-            return
-
-        selected_rows = self._result_table.selectionModel().selectedRows()
-        if not selected_rows:
+        window_info = self._get_selected_window_info()
+        if window_info is None:
             logger.warning("点击连接按钮但无选中行")
             return
 
-        row = selected_rows[0].row()
-        if row < 0 or row >= len(self._search_results):
-            return
-
-        window_info = self._search_results[row]
         if window_info.is_minimized:
-            self._show_tip("⚠ 窗口已最小化，请恢复窗口后重试")
+            self._show_tip("窗口已最小化，请恢复窗口后重试")
+            self._apply_ui_state()
             return
 
-        if self._state in (ConnectState.CONNECTED, ConnectState.ABNORMAL):
-            reply = QMessageBox.question(
-                self,
-                "确认切换连接",
-                f"当前已连接「{self._current_window.title}」，"
-                f"确认后将断开并连接新窗口，是否继续？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if reply == QMessageBox.StandardButton.No:
+        if self._is_connected_state():
+            if not self._confirm_switch_connection(window_info):
                 return
-            self._do_disconnect()
+            self._disconnect_for_switch()
 
-        self._do_connect(window_info)
+        self._start_connect(window_info)
 
-    def _do_connect(self, window_info: WindowInfo) -> None:
+    def _start_connect(self, window_info: WindowInfo) -> None:
         if self._connecting:
             return
 
@@ -486,8 +700,10 @@ class GameConnectTab(QWidget):
         self._connecting = True
         self._pending_connect_window = window_info
 
-        self._set_status(ConnectState.CONNECTING)
-        self._update_button_states()
+        self._set_connection_state(
+            ConnectionUiState.CONNECTING,
+            "正在连接窗口...",
+        )
 
         self._start_connect_timeout(request_id)
         self._task_runner.start_connect(
@@ -516,9 +732,11 @@ class GameConnectTab(QWidget):
 
         self._window_manager.disconnect_window()
 
-        self._set_status(ConnectState.TIMEOUT)
+        self._set_connection_state(
+            ConnectionUiState.DISCONNECTED,
+            "连接窗口超时，请稍后重试",
+        )
         self._show_tip("连接窗口超时，请稍后重试")
-        self._update_button_states()
 
     def _on_connect_finished(self, request_id: int, result: ConnectResult) -> None:
         self._stop_connect_timeout(request_id)
@@ -558,21 +776,23 @@ class GameConnectTab(QWidget):
                     match_score=1.0,
                 )
 
-            self._set_status(ConnectState.CONNECTED)
             self._window_info.setText(
                 f"窗口标题：{connected.title}  "
                 f"PID：{connected.pid}  "
                 f"客户区：{connected.client_size_text}"
             )
-            self._window_info.setVisible(True)
+            self._set_connection_state(
+                ConnectionUiState.CONNECTED_READY,
+                "已连接，执行就绪",
+            )
             self._health_timer.start()
         else:
-            self._set_status(ConnectState.DISCONNECTED)
             err_msg = (
                 f"连接失败：{result.error_message}"
                 if result.error_message
                 else "连接失败"
             )
+            self._set_connection_state(ConnectionUiState.DISCONNECTED, err_msg)
             self._show_tip(err_msg)
             if self._window_manager.is_connected():
                 self._health_timer.start()
@@ -587,7 +807,10 @@ class GameConnectTab(QWidget):
         self._connecting = False
         self._pending_connect_window = None
         logger.error("连接任务异常, request_id=%s, error=%s", request_id, message)
-        self._set_status(ConnectState.DISCONNECTED)
+        self._set_connection_state(
+            ConnectionUiState.DISCONNECTED,
+            f"连接失败：{message}",
+        )
         self._show_tip(f"连接失败：{message}")
 
         if self._window_manager.is_connected():
@@ -616,9 +839,11 @@ class GameConnectTab(QWidget):
 
         self._current_window = None
         self._pending_connect_window = None
-        self._set_status(ConnectState.DISCONNECTED)
         self._window_info.clear()
-        self._window_info.setVisible(False)
+        self._set_connection_state(
+            ConnectionUiState.DISCONNECTED,
+            "已断开连接",
+        )
 
         logger.info("断开连接完成")
 
@@ -667,9 +892,11 @@ class GameConnectTab(QWidget):
             if not self._window_manager.is_connected():
                 self._stop_health_timer()
                 self._current_window = None
-                self._set_status(ConnectState.DISCONNECTED)
                 self._window_info.clear()
-                self._window_info.setVisible(False)
+                self._set_connection_state(
+                    ConnectionUiState.DISCONNECTED,
+                    "未连接游戏窗口",
+                )
             return
 
         if health_result.window is not None:
@@ -679,24 +906,8 @@ class GameConnectTab(QWidget):
                 f"PID：{connected.pid}  "
                 f"客户区：{connected.client_size_text}"
             )
-            self._window_info.setVisible(True)
 
-        if health_result.is_ready:
-            if self._state == ConnectState.ABNORMAL:
-                logger.info("连接从异常恢复, 切回已连接状态")
-            self._set_status(ConnectState.CONNECTED)
-            self._status_text.setText("已连接，执行就绪")
-        elif health_result.is_healthy:
-            if self._state == ConnectState.ABNORMAL:
-                logger.info("连接从异常恢复, 切回已连接状态")
-            self._set_status(ConnectState.CONNECTED)
-            self._status_text.setText(health_result.message)
-        elif health_result.status == HealthStatus.ERROR:
-            self._status_text.setText(f"检测异常：{health_result.message}")
-            self._set_status(ConnectState.ABNORMAL)
-        else:
-            self._status_text.setText(f"连接异常：{health_result.message}")
-            self._set_status(ConnectState.ABNORMAL)
+        self._apply_health_result(health_result)
 
     def _on_health_failed(self, request_id: int, message: str) -> None:
         self._stop_health_timeout(request_id)
@@ -710,8 +921,10 @@ class GameConnectTab(QWidget):
             return
 
         logger.error("健康检测任务异常, request_id=%s, error=%s", request_id, message)
-        self._status_text.setText(f"检测异常：{message}")
-        self._set_status(ConnectState.ABNORMAL)
+        self._set_connection_state(
+            ConnectionUiState.CONNECTED_UNHEALTHY,
+            f"检测异常：{message}",
+        )
 
     def _on_health_timeout(self, request_id: int) -> None:
         self._stop_health_timeout(request_id)
@@ -722,66 +935,11 @@ class GameConnectTab(QWidget):
 
         self._active_health_request_id = 0
         self._health_check_running = False
-        self._status_text.setText("窗口状态检测超时")
-        self._set_status(ConnectState.ABNORMAL)
+        self._set_connection_state(
+            ConnectionUiState.CONNECTED_UNHEALTHY,
+            "窗口状态检测超时",
+        )
         logger.warning("健康检测超时, request_id=%s", request_id)
-
-    def _set_status(self, state: ConnectState) -> None:
-        old_state = self._state
-        self._state = state
-        logger.info("连接状态变更: %s → %s", old_state.value, state.value)
-
-        color_map = {
-            ConnectState.DISCONNECTED: "#f38ba8",
-            ConnectState.CONNECTING: "#f9e2af",
-            ConnectState.CONNECTED: "#a6e3a1",
-            ConnectState.ABNORMAL: "#f9e2af",
-            ConnectState.TIMEOUT: "#f38ba8",
-        }
-
-        text_map = {
-            ConnectState.DISCONNECTED: "未连接",
-            ConnectState.CONNECTING: "连接中…",
-            ConnectState.CONNECTED: "已连接",
-            ConnectState.TIMEOUT: "连接超时，请重试",
-        }
-
-        color = color_map.get(state, "#f38ba8")
-        self._indicator.setStyleSheet(
-            f"QLabel#status_indicator {{"
-            f"  background-color: {color};"
-            f"  border-radius: 8px;"
-            f"  min-width: 16px;"
-            f"  min-height: 16px;"
-            f"}}"
-        )
-
-        if state != ConnectState.ABNORMAL:
-            self._status_text.setText(text_map.get(state, "未连接"))
-
-        if state == ConnectState.CONNECTED:
-            self._window_info.setVisible(True)
-        elif state != ConnectState.ABNORMAL:
-            self._window_info.setVisible(False)
-
-        self._update_button_states()
-
-    def _update_button_states(self) -> None:
-        self._search_btn.setEnabled(not self._connecting)
-
-        has_selection = bool(self._result_table.selectedIndexes())
-        can_connect = has_selection and not self._search_running and not self._connecting
-        if has_selection and can_connect:
-            selected_rows = self._result_table.selectionModel().selectedRows()
-            if selected_rows:
-                row = selected_rows[0].row()
-                if 0 <= row < len(self._search_results):
-                    can_connect = not self._search_results[row].is_minimized
-
-        self._connect_btn.setEnabled(can_connect)
-        self._disconnect_btn.setEnabled(
-            self._state in (ConnectState.CONNECTED, ConnectState.ABNORMAL)
-        )
 
     def _show_tip(self, message: str) -> None:
         logger.warning("UI 提示: %s", message)

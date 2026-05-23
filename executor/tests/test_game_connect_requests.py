@@ -14,7 +14,7 @@ from nzfz_executor.core.models import (
     WindowInfo,
     WindowRect,
 )
-from nzfz_executor.ui.tabs.game_connect import GameConnectTab, ConnectState
+from nzfz_executor.ui.tabs.game_connect import ConnectionUiState, GameConnectTab
 
 
 @pytest.fixture(scope="session")
@@ -164,9 +164,9 @@ class TestSearchRequestGuard:
 
 
 class TestConnectionGeneration:
-    def test_do_connect_increments_generation(self, tab: GameConnectTab) -> None:
+    def test_start_connect_increments_generation(self, tab: GameConnectTab) -> None:
         before = tab._connection_generation
-        tab._do_connect(_fake_window_info())
+        tab._start_connect(_fake_window_info())
         assert tab._connection_generation == before + 1
         assert tab._connecting is True
         assert tab._connect_request_generations[1] == tab._connection_generation
@@ -194,7 +194,7 @@ class TestConnectionGeneration:
         tab._on_connect_timeout(7)
         tab._window_manager.disconnect_window.assert_called_once()
         assert tab._connecting is False
-        assert tab._state == ConnectState.TIMEOUT
+        assert tab._connection_state == ConnectionUiState.DISCONNECTED
 
 
 class TestHealthRequestGuard:
@@ -203,7 +203,7 @@ class TestHealthRequestGuard:
         tab._connection_generation = 2
         tab._health_request_generations[1] = 1
         tab._health_check_running = True
-        tab._state = ConnectState.CONNECTED
+        tab._connection_state = ConnectionUiState.CONNECTED_READY
 
         health = HealthCheckResult(
             status=HealthStatus.HANDLE_INVALID,
@@ -213,14 +213,14 @@ class TestHealthRequestGuard:
         tab._on_health_finished(1, health)
 
         assert tab._health_check_running is False
-        assert tab._state == ConnectState.CONNECTED
+        assert tab._connection_state == ConnectionUiState.CONNECTED_READY
 
     def test_current_health_updates_ui(self, tab: GameConnectTab) -> None:
         tab._active_health_request_id = 1
         tab._connection_generation = 1
         tab._health_request_generations[1] = 1
         tab._health_check_running = True
-        tab._state = ConnectState.CONNECTED
+        tab._connection_state = ConnectionUiState.CONNECTED_READY
 
         health = HealthCheckResult(
             status=HealthStatus.HEALTHY,
@@ -231,7 +231,7 @@ class TestHealthRequestGuard:
         tab._on_health_finished(1, health)
 
         assert tab._health_check_running is False
-        assert tab._state == ConnectState.CONNECTED
+        assert tab._connection_state == ConnectionUiState.CONNECTED_READY
         assert "执行就绪" in tab._status_text.text()
 
     def test_health_timeout_clears_running_without_disconnect(self, tab: GameConnectTab) -> None:
@@ -239,7 +239,7 @@ class TestHealthRequestGuard:
         tab._connection_generation = 1
         tab._health_request_generations[4] = 1
         tab._health_check_running = True
-        tab._state = ConnectState.CONNECTED
+        tab._connection_state = ConnectionUiState.CONNECTED_READY
         gen_before = tab._connection_generation
 
         tab._on_health_timeout(4)
@@ -247,7 +247,7 @@ class TestHealthRequestGuard:
         assert tab._health_check_running is False
         assert tab._connection_generation == gen_before
         tab._window_manager.disconnect_window.assert_not_called()
-        assert tab._state == ConnectState.ABNORMAL
+        assert tab._connection_state == ConnectionUiState.CONNECTED_UNHEALTHY
 
 
 class TestSearchDebounce:
