@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from enum import Enum
 
 from PySide6.QtCore import Qt, QTimer
@@ -10,7 +11,7 @@ from PySide6.QtGui import QColor, QCloseEvent, QImage, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox,
+    QHeaderView, QMessageBox, QPlainTextEdit, QProgressBar,
 )
 
 from PIL import Image
@@ -28,12 +29,20 @@ from nzfz_executor.core.models import (
     CaptureOptions,
     ScreenshotResult,
 )
+from nzfz_executor.ui.config.defaults import (
+    DEFAULT_EXECUTOR_LOG_TIME_FORMAT,
+    DEFAULT_EXECUTOR_PROGRESS_LOG_ENABLED,
+    DEFAULT_EXECUTOR_STOP_TIMEOUT_MS,
+    DEFAULT_MAX_EXECUTOR_LOG_LINES,
+    DEFAULT_SCREENSHOT_TIMEOUT_MS,
+)
 from nzfz_executor.ui.feedback import (
     FeedbackCode,
     FeedbackLevel,
     get_feedback_level,
     get_feedback_text,
 )
+from nzfz_executor.ui.models.executor_log import ExecutorLogEntry, ExecutorLogLevel
 from nzfz_executor.ui.states import ExecutorRunState
 from nzfz_executor.ui.workers import ExecutorTaskRunner, ScreenshotTaskRunner, WindowTaskRunner
 
@@ -50,8 +59,8 @@ SEARCH_DEBOUNCE_MS = 300
 SEARCH_TIMEOUT_MS = 3000
 CONNECT_TIMEOUT_MS = 5000
 HEALTH_TIMEOUT_MS = 2000
-SCREENSHOT_TIMEOUT_MS = 5000
-EXECUTOR_STOP_TIMEOUT_MS = 10_000
+SCREENSHOT_TIMEOUT_MS = DEFAULT_SCREENSHOT_TIMEOUT_MS
+EXECUTOR_STOP_TIMEOUT_MS = DEFAULT_EXECUTOR_STOP_TIMEOUT_MS
 
 
 class SearchUiState(str, Enum):
@@ -129,6 +138,9 @@ class GameConnectTab(QWidget):
         self._active_execution_id: int | None = None
         self._execution_generations: dict[int, int] = {}
 
+        self._executor_log_entries: list[ExecutorLogEntry] = []
+        self._max_executor_log_lines = DEFAULT_MAX_EXECUTOR_LOG_LINES
+
         self._search_running = False
         self._connecting = False
         self._health_check_running = False
@@ -173,6 +185,10 @@ class GameConnectTab(QWidget):
         self._start_executor_button: QPushButton
         self._stop_executor_button: QPushButton
         self._executor_status_label: QLabel
+        self._executor_progress_bar: QProgressBar
+        self._executor_step_label: QLabel
+        self._executor_log_text_edit: QPlainTextEdit
+        self._clear_executor_log_button: QPushButton
         self._indicator: QLabel
         self._status_text: QLabel
         self._execute_status_label: QLabel
@@ -495,6 +511,60 @@ class GameConnectTab(QWidget):
 
         return True
 
+    def _format_executor_log_entry(self, entry: ExecutorLogEntry) -> str:
+        timestamp = entry.timestamp.strftime(DEFAULT_EXECUTOR_LOG_TIME_FORMAT)
+        level = entry.level.value.upper()
+        return f"[{timestamp}] [{level}] {entry.message}"
+
+    def _append_executor_log(
+        self,
+        level: ExecutorLogLevel,
+        message: str,
+        execution_id: int | None = None,
+        step: str | None = None,
+    ) -> None:
+        entry = ExecutorLogEntry(
+            timestamp=datetime.now(),
+            level=level,
+            message=message,
+            execution_id=execution_id,
+            step=step,
+        )
+        self._executor_log_entries.append(entry)
+
+        while len(self._executor_log_entries) > self._max_executor_log_lines:
+            self._executor_log_entries.pop(0)
+
+        self._render_executor_logs()
+        self._scroll_executor_log_to_bottom()
+
+    def _render_executor_logs(self) -> None:
+        lines = [
+            self._format_executor_log_entry(entry)
+            for entry in self._executor_log_entries
+        ]
+        self._executor_log_text_edit.setPlainText("\n".join(lines))
+
+    def _scroll_executor_log_to_bottom(self) -> None:
+        scroll_bar = self._executor_log_text_edit.verticalScrollBar()
+        scroll_bar.setValue(scroll_bar.maximum())
+
+    def _clear_executor_logs(self) -> None:
+        self._executor_log_entries.clear()
+        self._executor_log_text_edit.clear()
+
+    def _set_executor_step(self, message: str) -> None:
+        self._executor_step_label.setText(f"当前步骤：{message}")
+
+    def _update_executor_progress(self, percent: int, message: str) -> None:
+        percent = max(0, min(100, percent))
+        self._executor_progress_bar.setValue(percent)
+        self._set_executor_step(message)
+
+    def _reset_executor_progress(self) -> None:
+        self._executor_progress_bar.setValue(0)
+        self._set_executor_step("-")
+
     def _on_start_executor_clicked(self) -> None:
         if self._executor_state != ExecutorRunState.READY:
             self._show_executor_feedback(FeedbackCode.EXECUTOR_START_BLOCKED)
@@ -515,6 +585,14 @@ class GameConnectTab(QWidget):
         self._active_execution_id = execution_id
         self._execution_generations[execution_id] = self._connection_generation
 
+        self._executor_progress_bar.setValue(0)
+        self._set_executor_step("准备启动执行任务")
+        self._append_executor_log(
+            ExecutorLogLevel.INFO,
+            "准备启动执行任务",
+            execution_id=execution_id,
+        )
+
         self._set_executor_state(ExecutorRunState.RUNNING)
 
         started = self._executor_task_runner.start(
@@ -522,30 +600,65 @@ class GameConnectTab(QWidget):
             context=context,
         )
         if not started:
+            self._append_executor_log(
+                ExecutorLogLevel.ERROR,
+                "执行任务启动失败：当前已有任务正在运行",
+                execution_id=execution_id,
+            )
             self._active_execution_id = None
             self._execution_generations.pop(execution_id, None)
             self._set_executor_state(
                 ExecutorRunState.FAILED,
                 get_feedback_text(FeedbackCode.EXECUTOR_ALREADY_RUNNING),
             )
+            self._set_executor_step("执行任务启动失败")
             self._refresh_executor_ready_state()
+            return
+
+        self._append_executor_log(
+            ExecutorLogLevel.SUCCESS,
+            "执行任务已启动",
+            execution_id=execution_id,
+        )
 
     def _on_stop_executor_clicked(self) -> None:
         if self._executor_state != ExecutorRunState.RUNNING:
             return
 
+        execution_id = self._active_execution_id
+
+        self._append_executor_log(
+            ExecutorLogLevel.WARNING,
+            "用户请求停止任务",
+            execution_id=execution_id,
+        )
+
         self._set_executor_state(ExecutorRunState.STOPPING)
+        self._set_executor_step("正在停止任务...")
         self._executor_stop_timeout_timer.start(EXECUTOR_STOP_TIMEOUT_MS)
 
         accepted = self._executor_task_runner.request_stop()
         if not accepted:
             self._executor_stop_timeout_timer.stop()
+            self._append_executor_log(
+                ExecutorLogLevel.ERROR,
+                "停止任务失败：当前没有正在运行的任务",
+                execution_id=execution_id,
+            )
             self._active_execution_id = None
             self._set_executor_state(
                 ExecutorRunState.FAILED,
                 get_feedback_text(FeedbackCode.EXECUTOR_NO_ACTIVE_TASK),
             )
+            self._set_executor_step("停止任务失败")
             self._refresh_executor_ready_state()
+            return
+
+        self._append_executor_log(
+            ExecutorLogLevel.INFO,
+            "停止请求已发送，等待任务安全退出",
+            execution_id=execution_id,
+        )
 
     def _on_executor_completed(self, execution_id: int) -> None:
         if not self._is_active_execution_result(execution_id):
@@ -555,6 +668,14 @@ class GameConnectTab(QWidget):
         self._executor_stop_timeout_timer.stop()
         self._active_execution_id = None
         self._execution_generations.pop(execution_id, None)
+
+        self._executor_progress_bar.setValue(100)
+        self._set_executor_step("任务执行完成")
+        self._append_executor_log(
+            ExecutorLogLevel.SUCCESS,
+            "任务执行完成",
+            execution_id=execution_id,
+        )
 
         self._set_executor_state(ExecutorRunState.COMPLETED)
         self._refresh_executor_ready_state()
@@ -567,6 +688,13 @@ class GameConnectTab(QWidget):
         self._executor_stop_timeout_timer.stop()
         self._active_execution_id = None
         self._execution_generations.pop(execution_id, None)
+
+        self._set_executor_step("任务已停止")
+        self._append_executor_log(
+            ExecutorLogLevel.SUCCESS,
+            "任务已停止",
+            execution_id=execution_id,
+        )
 
         self._set_executor_state(ExecutorRunState.STOPPED)
         self._refresh_executor_ready_state()
@@ -584,17 +712,34 @@ class GameConnectTab(QWidget):
         self._active_execution_id = None
         self._execution_generations.pop(execution_id, None)
 
+        display_message = message or get_feedback_text(FeedbackCode.EXECUTOR_FAILED)
+        self._set_executor_step(f"任务执行失败：{display_message}")
+        self._append_executor_log(
+            ExecutorLogLevel.ERROR,
+            f"任务执行失败：{display_message}",
+            execution_id=execution_id,
+        )
+
         self._set_executor_state(
             ExecutorRunState.FAILED,
-            message or get_feedback_text(FeedbackCode.EXECUTOR_FAILED),
+            display_message,
         )
         self._refresh_executor_ready_state()
 
     def _on_executor_log(self, execution_id: int, message: str) -> None:
         if not self._is_active_execution_result(execution_id):
+            logger.debug(
+                "Discard expired executor log: execution_id=%s",
+                execution_id,
+            )
             return
 
         logger.info("Executor log[%s]: %s", execution_id, message)
+        self._append_executor_log(
+            ExecutorLogLevel.INFO,
+            message,
+            execution_id=execution_id,
+        )
 
     def _on_executor_progress(
         self,
@@ -603,6 +748,10 @@ class GameConnectTab(QWidget):
         message: str,
     ) -> None:
         if not self._is_active_execution_result(execution_id):
+            logger.debug(
+                "Discard expired executor progress: execution_id=%s",
+                execution_id,
+            )
             return
 
         logger.debug(
@@ -611,9 +760,14 @@ class GameConnectTab(QWidget):
             percent,
             message,
         )
-        self._executor_status_label.setText(
-            f"正在执行任务... {percent}% - {message}",
-        )
+        self._update_executor_progress(percent, message)
+
+        if DEFAULT_EXECUTOR_PROGRESS_LOG_ENABLED:
+            self._append_executor_log(
+                ExecutorLogLevel.INFO,
+                f"{percent}% - {message}",
+                execution_id=execution_id,
+            )
 
     def _on_executor_start_rejected(
         self,
@@ -623,13 +777,21 @@ class GameConnectTab(QWidget):
         if execution_id != self._active_execution_id:
             return
 
+        display_message = message or get_feedback_text(FeedbackCode.EXECUTOR_ALREADY_RUNNING)
+        self._append_executor_log(
+            ExecutorLogLevel.ERROR,
+            f"执行任务启动失败：{display_message}",
+            execution_id=execution_id,
+        )
+
         self._active_execution_id = None
         self._execution_generations.pop(execution_id, None)
 
         self._set_executor_state(
             ExecutorRunState.FAILED,
-            message or get_feedback_text(FeedbackCode.EXECUTOR_ALREADY_RUNNING),
+            display_message,
         )
+        self._set_executor_step("执行任务启动失败")
         self._refresh_executor_ready_state()
 
     def _on_executor_stop_timeout(self) -> None:
@@ -637,10 +799,17 @@ class GameConnectTab(QWidget):
 
         logger.warning("Executor stop timeout: execution_id=%s", execution_id)
 
+        self._append_executor_log(
+            ExecutorLogLevel.ERROR,
+            get_feedback_text(FeedbackCode.EXECUTOR_STOP_TIMEOUT),
+            execution_id=execution_id,
+        )
+
         self._active_execution_id = None
         if execution_id is not None:
             self._execution_generations.pop(execution_id, None)
 
+        self._set_executor_step("任务停止超时")
         self._set_executor_state(
             ExecutorRunState.FAILED,
             get_feedback_text(FeedbackCode.EXECUTOR_STOP_TIMEOUT),
@@ -971,6 +1140,29 @@ class GameConnectTab(QWidget):
 
         self._executor_status_label = QLabel()
         section.addWidget(self._executor_status_label)
+
+        self._executor_progress_bar = QProgressBar()
+        self._executor_progress_bar.setRange(0, 100)
+        self._executor_progress_bar.setValue(0)
+        section.addWidget(self._executor_progress_bar)
+
+        self._executor_step_label = QLabel("当前步骤：-")
+        section.addWidget(self._executor_step_label)
+
+        log_header = QHBoxLayout()
+        log_title = QLabel("执行日志")
+        log_header.addWidget(log_title)
+        log_header.addStretch()
+        self._clear_executor_log_button = QPushButton("清空日志")
+        self._clear_executor_log_button.clicked.connect(self._clear_executor_logs)
+        log_header.addWidget(self._clear_executor_log_button)
+        section.addLayout(log_header)
+
+        self._executor_log_text_edit = QPlainTextEdit()
+        self._executor_log_text_edit.setReadOnly(True)
+        self._executor_log_text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self._executor_log_text_edit.setMinimumHeight(120)
+        section.addWidget(self._executor_log_text_edit)
 
         return section
 
