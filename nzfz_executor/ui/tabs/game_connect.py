@@ -6,13 +6,16 @@ import logging
 from enum import Enum
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QCloseEvent
+from PySide6.QtGui import QColor, QCloseEvent, QImage, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox,
 )
 
+from PIL import Image
+
+from nzfz_executor.core.screenshot_manager import ScreenshotManager
 from nzfz_executor.core.window_manager import WindowManager
 from nzfz_executor.core.models import (
     WindowInfo,
@@ -20,6 +23,10 @@ from nzfz_executor.core.models import (
     ConnectResult,
     HealthCheckResult,
     ConnectOptions,
+    CaptureRegion,
+    CaptureBackendType,
+    CaptureOptions,
+    ScreenshotResult,
 )
 from nzfz_executor.ui.feedback import (
     FeedbackCode,
@@ -27,7 +34,7 @@ from nzfz_executor.ui.feedback import (
     get_feedback_level,
     get_feedback_text,
 )
-from nzfz_executor.ui.workers import WindowTaskRunner
+from nzfz_executor.ui.workers import ScreenshotTaskRunner, WindowTaskRunner
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +49,7 @@ SEARCH_DEBOUNCE_MS = 300
 SEARCH_TIMEOUT_MS = 3000
 CONNECT_TIMEOUT_MS = 5000
 HEALTH_TIMEOUT_MS = 2000
+SCREENSHOT_TIMEOUT_MS = 5000
 
 
 class SearchUiState(str, Enum):
@@ -79,6 +87,11 @@ class GameConnectTab(QWidget):
         self._task_runner.connect_failed.connect(self._on_connect_failed)
         self._task_runner.health_finished.connect(self._on_health_finished)
         self._task_runner.health_failed.connect(self._on_health_failed)
+
+        self._screenshot_manager = ScreenshotManager()
+        self._screenshot_task_runner = ScreenshotTaskRunner(self._screenshot_manager, self)
+        self._screenshot_task_runner.capture_finished.connect(self._on_capture_finished)
+        self._screenshot_task_runner.capture_failed.connect(self._on_capture_failed)
 
         self._search_state = SearchUiState.IDLE
         self._connection_state = ConnectionUiState.DISCONNECTED
@@ -119,6 +132,17 @@ class GameConnectTab(QWidget):
         self._connect_timeout_timers: dict[int, QTimer] = {}
         self._health_timeout_timers: dict[int, QTimer] = {}
 
+        self._capture_request_id = 0
+        self._active_capture_request_id = 0
+        self._capture_request_generations: dict[int, int] = {}
+        self._is_capturing = False
+        self._last_screenshot_pixmap: QPixmap | None = None
+
+        self._capture_timeout_timer = QTimer(self)
+        self._capture_timeout_timer.setSingleShot(True)
+        self._capture_timeout_timer.setInterval(SCREENSHOT_TIMEOUT_MS)
+        self._capture_timeout_timer.timeout.connect(self._on_capture_timeout)
+
         self._status_label: QLabel
         self._search_status_label: QLabel
         self._search_input: QLineEdit
@@ -131,6 +155,10 @@ class GameConnectTab(QWidget):
         self._status_text: QLabel
         self._execute_status_label: QLabel
         self._window_info: QLabel
+        self._screenshot_preview_label: QLabel
+        self._refresh_screenshot_button: QPushButton
+        self._screenshot_status_label: QLabel
+        self._screenshot_meta_label: QLabel
 
         self._init_ui()
         self._set_search_state(SearchUiState.IDLE)
@@ -151,6 +179,14 @@ class GameConnectTab(QWidget):
         self._clear_search_timeouts()
         self._clear_connect_timeouts()
         self._clear_health_timeouts()
+        self._reset_capture_state()
+
+    def _reset_capture_state(self) -> None:
+        """停止截图超时计时器并重置截图进行中状态。"""
+        self._capture_timeout_timer.stop()
+        self._active_capture_request_id = 0
+        self._is_capturing = False
+        self._update_screenshot_button_state()
 
     def _is_connect_result_current(
         self,
@@ -386,6 +422,7 @@ class GameConnectTab(QWidget):
         self._update_search_status_label()
         self._update_connection_status_label()
         self._update_execute_status_label()
+        self._update_screenshot_button_state()
 
     def _update_search_status_label(self) -> None:
         if self._search_message:
@@ -512,6 +549,9 @@ class GameConnectTab(QWidget):
         self._clear_connect_timeouts()
         self._clear_health_timeouts()
 
+        self._reset_capture_state()
+        self._clear_screenshot_preview()
+
         self._window_manager.disconnect_window()
 
     def _init_ui(self) -> None:
@@ -527,7 +567,7 @@ class GameConnectTab(QWidget):
         layout.addLayout(self._create_search_section())
         layout.addLayout(self._create_action_section())
         layout.addLayout(self._create_status_section())
-        layout.addLayout(self._create_screenshot_placeholder())
+        layout.addLayout(self._create_screenshot_area())
         layout.addStretch()
 
     def _create_search_section(self) -> QVBoxLayout:
@@ -615,14 +655,32 @@ class GameConnectTab(QWidget):
 
         return section
 
-    def _create_screenshot_placeholder(self) -> QVBoxLayout:
+    def _create_screenshot_area(self) -> QVBoxLayout:
         section = QVBoxLayout()
+        section.setSpacing(8)
 
-        placeholder = QLabel("截图功能暂未实现")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder.setProperty("class", "screenshot-placeholder")
-        placeholder.setMinimumHeight(120)
-        section.addWidget(placeholder)
+        title = QLabel("截图预览")
+        section.addWidget(title)
+
+        self._screenshot_preview_label = QLabel("暂无截图")
+        self._screenshot_preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._screenshot_preview_label.setProperty("class", "screenshot-placeholder")
+        self._screenshot_preview_label.setMinimumHeight(120)
+        section.addWidget(self._screenshot_preview_label)
+
+        self._refresh_screenshot_button = QPushButton("刷新截图")
+        self._refresh_screenshot_button.setEnabled(False)
+        self._refresh_screenshot_button.clicked.connect(
+            self._on_refresh_screenshot_clicked,
+        )
+        section.addWidget(self._refresh_screenshot_button)
+
+        self._screenshot_status_label = QLabel()
+        section.addWidget(self._screenshot_status_label)
+
+        self._screenshot_meta_label = QLabel()
+        self._screenshot_meta_label.setWordWrap(True)
+        section.addWidget(self._screenshot_meta_label)
 
         return section
 
@@ -835,6 +893,10 @@ class GameConnectTab(QWidget):
 
         self._window_manager.disconnect_window()
 
+        self._reset_capture_state()
+        self._clear_screenshot_preview()
+        self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_UNAVAILABLE)
+
         self._set_connection_state(
             ConnectionUiState.DISCONNECTED,
             get_feedback_text(FeedbackCode.CONNECT_TIMEOUT),
@@ -940,6 +1002,10 @@ class GameConnectTab(QWidget):
         self._clear_connect_timeouts()
         self._clear_health_timeouts()
 
+        self._reset_capture_state()
+        self._clear_screenshot_preview()
+        self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_UNAVAILABLE)
+
         self._window_manager.disconnect_window()
 
         self._current_window = None
@@ -1005,6 +1071,9 @@ class GameConnectTab(QWidget):
                 self._stop_health_timer()
                 self._current_window = None
                 self._window_info.clear()
+                self._reset_capture_state()
+                self._clear_screenshot_preview()
+                self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_UNAVAILABLE)
                 self._set_connection_state(ConnectionUiState.DISCONNECTED)
             return
 
@@ -1051,3 +1120,202 @@ class GameConnectTab(QWidget):
             get_feedback_text(FeedbackCode.HEALTH_TIMEOUT),
             feedback_level=FeedbackLevel.WARNING,
         )
+
+    def _next_capture_request_id(self) -> int:
+        self._capture_request_id += 1
+        return self._capture_request_id
+
+    def _is_active_capture_result(self, request_id: int) -> bool:
+        if request_id != self._active_capture_request_id:
+            logger.debug(
+                "Discard expired screenshot result: request_id=%s, active=%s",
+                request_id,
+                self._active_capture_request_id,
+            )
+            return False
+
+        request_generation = self._capture_request_generations.get(request_id)
+        if request_generation != self._connection_generation:
+            logger.debug(
+                "Discard screenshot result due to generation mismatch: "
+                "request_id=%s, request_generation=%s, current_generation=%s",
+                request_id,
+                request_generation,
+                self._connection_generation,
+            )
+            return False
+
+        return True
+
+    def _update_screenshot_button_state(self) -> None:
+        context = self._window_manager.get_connected_context()
+        enabled = (
+            context is not None
+            and self._is_connected_state()
+            and not self._connecting
+            and not self._is_capturing
+        )
+        self._refresh_screenshot_button.setEnabled(enabled)
+
+    def _show_screenshot_feedback(
+        self,
+        code: FeedbackCode,
+        **kwargs: object,
+    ) -> None:
+        text = get_feedback_text(code, **kwargs)
+        level = get_feedback_level(code)
+        self._screenshot_status_label.setText(text)
+        self._apply_feedback_style(self._screenshot_status_label, level)
+
+    def _show_screenshot_message(
+        self,
+        message: str,
+        level: FeedbackLevel = FeedbackLevel.ERROR,
+    ) -> None:
+        self._screenshot_status_label.setText(message)
+        self._apply_feedback_style(self._screenshot_status_label, level)
+
+    def _clear_screenshot_preview(self) -> None:
+        self._last_screenshot_pixmap = None
+        self._screenshot_preview_label.clear()
+        self._screenshot_preview_label.setText("暂无截图")
+        self._screenshot_meta_label.clear()
+
+    def _on_refresh_screenshot_clicked(self) -> None:
+        if self._is_capturing:
+            return
+
+        context = self._window_manager.get_connected_context()
+        if context is None:
+            self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_UNAVAILABLE)
+            return
+
+        request_id = self._next_capture_request_id()
+        self._active_capture_request_id = request_id
+        self._capture_request_generations[request_id] = self._connection_generation
+
+        self._is_capturing = True
+        self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_CAPTURING)
+        self._update_screenshot_button_state()
+
+        self._capture_timeout_timer.start(SCREENSHOT_TIMEOUT_MS)
+
+        options = CaptureOptions(
+            region=CaptureRegion.CLIENT,
+            backend=CaptureBackendType.AUTO,
+            require_foreground=False,
+            allow_occluded=True,
+        )
+
+        logger.debug(
+            "Start screenshot capture: request_id=%s, generation=%s",
+            request_id,
+            self._connection_generation,
+        )
+        self._screenshot_task_runner.start_capture(
+            request_id=request_id,
+            context=context,
+            options=options,
+        )
+
+    def _on_capture_finished(
+        self,
+        request_id: int,
+        result: ScreenshotResult,
+    ) -> None:
+        if not self._is_active_capture_result(request_id):
+            return
+
+        self._capture_timeout_timer.stop()
+        self._capture_request_generations.pop(request_id, None)
+        self._active_capture_request_id = 0
+        self._is_capturing = False
+
+        if result.success and result.image is not None:
+            logger.debug("Screenshot capture success: request_id=%s", request_id)
+            self._update_screenshot_preview(result)
+            self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_SUCCESS)
+            self._show_screenshot_meta(result)
+        else:
+            logger.warning(
+                "Screenshot capture failed: request_id=%s, message=%s",
+                request_id,
+                result.message,
+            )
+            self._show_screenshot_failed_result(result)
+
+        self._update_screenshot_button_state()
+
+    def _on_capture_failed(self, request_id: int, message: str) -> None:
+        if not self._is_active_capture_result(request_id):
+            return
+
+        self._capture_timeout_timer.stop()
+        self._capture_request_generations.pop(request_id, None)
+        self._active_capture_request_id = 0
+        self._is_capturing = False
+
+        logger.warning("Screenshot worker failed: %s", message)
+        self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_FAILED)
+        self._update_screenshot_button_state()
+
+    def _on_capture_timeout(self) -> None:
+        request_id = self._active_capture_request_id
+        if request_id == 0:
+            return
+
+        logger.warning("Screenshot timeout: request_id=%s", request_id)
+        self._active_capture_request_id = 0
+        self._is_capturing = False
+        self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_TIMEOUT)
+        self._update_screenshot_button_state()
+
+    def _show_screenshot_failed_result(self, result: ScreenshotResult) -> None:
+        if result.message:
+            self._show_screenshot_message(result.message)
+            self._screenshot_meta_label.setText(result.message)
+        else:
+            self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_FAILED)
+
+    def _show_screenshot_meta(self, result: ScreenshotResult) -> None:
+        captured_time = (
+            result.captured_at.strftime("%H:%M:%S")
+            if result.captured_at
+            else "-"
+        )
+        occluded_text = "是" if result.supports_occluded else "否"
+        meta = (
+            f"尺寸：{result.width} x {result.height} | "
+            f"后端：{result.backend.value} | "
+            f"时间：{captured_time} | "
+            f"遮挡支持：{occluded_text}"
+        )
+        if result.message:
+            meta += f" | 提示：{result.message}"
+        self._screenshot_meta_label.setText(meta)
+
+    def _update_screenshot_preview(self, result: ScreenshotResult) -> None:
+        if result.image is None:
+            return
+        pixmap = self._pil_image_to_pixmap(result.image)
+        self._set_screenshot_pixmap(pixmap)
+
+    def _pil_image_to_pixmap(self, image: Image.Image) -> QPixmap:
+        rgba_image = image.convert("RGBA")
+        data = rgba_image.tobytes("raw", "RGBA")
+        qimage = QImage(
+            data,
+            rgba_image.width,
+            rgba_image.height,
+            QImage.Format.Format_RGBA8888,
+        )
+        return QPixmap.fromImage(qimage.copy())
+
+    def _set_screenshot_pixmap(self, pixmap: QPixmap) -> None:
+        self._last_screenshot_pixmap = pixmap
+        scaled = pixmap.scaled(
+            self._screenshot_preview_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._screenshot_preview_label.setPixmap(scaled)

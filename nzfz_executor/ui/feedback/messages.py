@@ -48,6 +48,13 @@ class FeedbackCode(Enum):
     TASK_EXCEPTION = "task.exception"
     TASK_RESULT_EXPIRED = "task.result_expired"
 
+    SCREENSHOT_CAPTURING = "screenshot.capturing"
+    SCREENSHOT_SUCCESS = "screenshot.success"
+    SCREENSHOT_FAILED = "screenshot.failed"
+    SCREENSHOT_TIMEOUT = "screenshot.timeout"
+    SCREENSHOT_UNAVAILABLE = "screenshot.unavailable"
+    SCREENSHOT_BACKEND_LIMITED = "screenshot.backend_limited"
+
 
 @dataclass(frozen=True)
 class FeedbackMessage:
@@ -167,6 +174,30 @@ FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
     FeedbackCode.TASK_RESULT_EXPIRED: FeedbackMessage(
         FeedbackLevel.INFO,
         "任务结果已过期，已忽略",
+    ),
+    FeedbackCode.SCREENSHOT_CAPTURING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "正在刷新截图...",
+    ),
+    FeedbackCode.SCREENSHOT_SUCCESS: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "截图刷新成功",
+    ),
+    FeedbackCode.SCREENSHOT_FAILED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "截图失败，请稍后重试",
+    ),
+    FeedbackCode.SCREENSHOT_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "截图超时，请稍后重试",
+    ),
+    FeedbackCode.SCREENSHOT_UNAVAILABLE: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前未连接游戏窗口，无法截图",
+    ),
+    FeedbackCode.SCREENSHOT_BACKEND_LIMITED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前截图后端不支持被遮挡窗口截图，若窗口被遮挡，截图内容可能不准确",
     ),
 }
 
