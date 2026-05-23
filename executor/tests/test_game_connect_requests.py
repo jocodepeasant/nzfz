@@ -14,6 +14,7 @@ from nzfz_executor.core.models import (
     WindowInfo,
     WindowRect,
 )
+from nzfz_executor.ui.feedback import FeedbackCode, get_feedback_text
 from nzfz_executor.ui.tabs.game_connect import ConnectionUiState, GameConnectTab
 
 
@@ -232,7 +233,7 @@ class TestHealthRequestGuard:
 
         assert tab._health_check_running is False
         assert tab._connection_state == ConnectionUiState.CONNECTED_READY
-        assert "执行就绪" in tab._status_text.text()
+        assert tab._execute_status_label.text() == get_feedback_text(FeedbackCode.HEALTH_READY)
 
     def test_health_timeout_clears_running_without_disconnect(self, tab: GameConnectTab) -> None:
         tab._active_health_request_id = 4
