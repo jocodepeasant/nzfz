@@ -19,6 +19,7 @@ from nzfz_executor.core.models import (
 from nzfz_executor.core.screenshot_manager import (
     ScreenCaptureBackend,
     ScreenshotManager,
+    WindowsGraphicsCaptureBackend,
 )
 from nzfz_executor.core.window_manager import WindowManager
 
@@ -97,14 +98,26 @@ class TestWindowManagerContext:
 class TestScreenshotManager:
     def test_capture_without_context(self) -> None:
         manager = ScreenshotManager()
-        result = manager.capture(None)
+        with patch.object(
+            WindowsGraphicsCaptureBackend,
+            "is_available",
+            return_value=False,
+        ):
+            result = manager.capture(None)
         assert result.success is False
         assert result.message == "当前未连接游戏窗口"
         assert result.backend == CaptureBackendType.SCREEN
 
     def test_capture_default_options(self) -> None:
         manager = ScreenshotManager()
-        with patch.object(ScreenCaptureBackend, "capture") as mock_capture:
+        with (
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "is_available",
+                return_value=False,
+            ),
+            patch.object(ScreenCaptureBackend, "capture") as mock_capture,
+        ):
             mock_capture.return_value = ScreenshotResult(success=True)
             context = _connected_window()
             manager.capture(context)
@@ -121,7 +134,14 @@ class TestScreenshotManager:
     )
     def test_select_screen_backend(self, backend: CaptureBackendType) -> None:
         manager = ScreenshotManager()
-        with patch.object(ScreenCaptureBackend, "capture") as mock_capture:
+        with (
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "is_available",
+                return_value=False,
+            ),
+            patch.object(ScreenCaptureBackend, "capture") as mock_capture,
+        ):
             mock_capture.return_value = ScreenshotResult(success=True)
             manager.capture(
                 _connected_window(),
@@ -129,22 +149,149 @@ class TestScreenshotManager:
             )
             mock_capture.assert_called_once()
 
-    @pytest.mark.parametrize(
-        "backend",
-        [
-            CaptureBackendType.PRINT_WINDOW,
-            CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE,
-        ],
-    )
-    def test_unimplemented_backend(self, backend: CaptureBackendType) -> None:
+    def test_unimplemented_print_window_backend(self) -> None:
         manager = ScreenshotManager()
         result = manager.capture(
             _connected_window(),
-            CaptureOptions(backend=backend),
+            CaptureOptions(backend=CaptureBackendType.PRINT_WINDOW),
         )
         assert result.success is False
         assert result.message == "当前截图后端暂未实现"
-        assert result.backend == backend
+        assert result.backend == CaptureBackendType.PRINT_WINDOW
+
+    def test_auto_uses_wgc_when_available(self) -> None:
+        manager = ScreenshotManager()
+        wgc_result = ScreenshotResult(
+            success=True,
+            backend=CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE,
+            supports_occluded=True,
+        )
+        with (
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "is_available",
+                return_value=True,
+            ),
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "capture",
+                return_value=wgc_result,
+            ) as mock_wgc,
+            patch.object(ScreenCaptureBackend, "capture") as mock_screen,
+        ):
+            result = manager.capture(
+                _connected_window(),
+                CaptureOptions(backend=CaptureBackendType.AUTO),
+            )
+            mock_wgc.assert_called_once()
+            mock_screen.assert_not_called()
+            assert result is wgc_result
+
+    def test_auto_fallback_to_screen_when_wgc_fails(self) -> None:
+        manager = ScreenshotManager()
+        wgc_result = ScreenshotResult(
+            success=False,
+            backend=CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE,
+            message="WGC fail",
+        )
+        screen_result = ScreenshotResult(
+            success=True,
+            backend=CaptureBackendType.SCREEN,
+            supports_occluded=False,
+        )
+        with (
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "is_available",
+                return_value=True,
+            ),
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "capture",
+                return_value=wgc_result,
+            ),
+            patch.object(
+                ScreenCaptureBackend,
+                "capture",
+                return_value=screen_result,
+            ) as mock_screen,
+        ):
+            result = manager.capture(
+                _connected_window(),
+                CaptureOptions(backend=CaptureBackendType.AUTO),
+            )
+            mock_screen.assert_called_once()
+            assert result.success is True
+            assert result.backend == CaptureBackendType.SCREEN
+            assert "回退" in result.message
+
+    def test_auto_uses_screen_when_wgc_unavailable(self) -> None:
+        manager = ScreenshotManager()
+        screen_result = ScreenshotResult(
+            success=True,
+            backend=CaptureBackendType.SCREEN,
+            supports_occluded=False,
+        )
+        with (
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "is_available",
+                return_value=False,
+            ),
+            patch.object(
+                ScreenCaptureBackend,
+                "capture",
+                return_value=screen_result,
+            ) as mock_screen,
+            patch.object(WindowsGraphicsCaptureBackend, "capture") as mock_wgc,
+        ):
+            result = manager.capture(
+                _connected_window(),
+                CaptureOptions(backend=CaptureBackendType.AUTO),
+            )
+            mock_wgc.assert_not_called()
+            mock_screen.assert_called_once()
+            assert result.success is True
+            assert "不可用" in result.message
+
+    def test_explicit_wgc_does_not_fallback(self) -> None:
+        manager = ScreenshotManager()
+        wgc_result = ScreenshotResult(
+            success=False,
+            backend=CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE,
+            message="explicit fail",
+        )
+        with (
+            patch.object(
+                WindowsGraphicsCaptureBackend,
+                "capture",
+                return_value=wgc_result,
+            ) as mock_wgc,
+            patch.object(ScreenCaptureBackend, "capture") as mock_screen,
+        ):
+            result = manager.capture(
+                _connected_window(),
+                CaptureOptions(
+                    backend=CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE,
+                ),
+            )
+            mock_wgc.assert_called_once()
+            mock_screen.assert_not_called()
+            assert result is wgc_result
+
+    def test_explicit_screen_does_not_try_wgc(self) -> None:
+        manager = ScreenshotManager()
+        with (
+            patch.object(ScreenCaptureBackend, "capture") as mock_screen,
+            patch.object(WindowsGraphicsCaptureBackend, "capture") as mock_wgc,
+        ):
+            mock_screen.return_value = ScreenshotResult(success=True)
+            manager.capture(
+                _connected_window(),
+                CaptureOptions(backend=CaptureBackendType.SCREEN),
+            )
+            mock_screen.assert_called_once()
+            mock_wgc.assert_not_called()
 
 
 class TestScreenCaptureBackend:
@@ -272,3 +419,108 @@ class TestScreenCaptureBackend:
             result = backend.capture(_connected_window(), CaptureOptions())
         assert result.success is False
         assert result.message == "当前平台不支持窗口截图"
+
+
+class TestWindowsGraphicsCaptureBackend:
+    def _run_capture(
+        self,
+        options: CaptureOptions | None = None,
+        *,
+        is_available: bool = True,
+        is_window: bool = True,
+        is_visible: bool = True,
+        is_minimized: bool = False,
+        capture_raises: Exception | None = None,
+        image_size: tuple[int, int] = (800, 600),
+    ) -> ScreenshotResult:
+        backend = WindowsGraphicsCaptureBackend()
+        context = _connected_window()
+        image = Image.new("RGBA", image_size)
+
+        patches = [
+            patch.object(backend, "is_available", return_value=is_available),
+            patch(
+                "nzfz_executor.core.screenshot_manager._is_window",
+                return_value=is_window,
+            ),
+            patch(
+                "nzfz_executor.core.screenshot_manager._is_window_visible",
+                return_value=is_visible,
+            ),
+            patch(
+                "nzfz_executor.core.screenshot_manager._is_window_minimized",
+                return_value=is_minimized,
+            ),
+            patch(
+                "nzfz_executor.core.screenshot_manager._get_window_rect",
+                return_value=WindowRect(0, 0, 800, 600),
+            ),
+            patch(
+                "nzfz_executor.core.screenshot_manager._get_client_rect_on_screen",
+                return_value=WindowRect(10, 20, 790, 580),
+            ),
+        ]
+
+        if capture_raises is not None:
+            capture_patch = patch(
+                "nzfz_executor.core.wgc_capture.capture_hwnd_to_image",
+                side_effect=capture_raises,
+            )
+        else:
+            capture_patch = patch(
+                "nzfz_executor.core.wgc_capture.capture_hwnd_to_image",
+                return_value=image,
+            )
+
+        with capture_patch:
+            for item in patches:
+                item.start()
+            try:
+                return backend.capture(context, options or CaptureOptions())
+            finally:
+                for item in reversed(patches):
+                    item.stop()
+
+    def test_unavailable(self) -> None:
+        result = self._run_capture(is_available=False)
+        assert result.success is False
+        assert "不可用" in result.message
+        assert result.backend == CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE
+        assert result.supports_occluded is True
+
+    def test_success(self) -> None:
+        result = self._run_capture()
+        assert result.success is True
+        assert result.backend == CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE
+        assert result.supports_occluded is True
+        assert result.image is not None
+
+    def test_minimized(self) -> None:
+        result = self._run_capture(is_minimized=True)
+        assert result.success is False
+        assert result.message == "窗口已最小化，无法截图"
+
+    def test_capture_exception(self) -> None:
+        result = self._run_capture(capture_raises=RuntimeError("gpu error"))
+        assert result.success is False
+        assert "gpu error" in result.message
+
+
+class TestWgcCaptureHelpers:
+    def test_crop_client_region(self) -> None:
+        from nzfz_executor.core.wgc_capture import crop_captured_image
+
+        image = Image.new("RGBA", (800, 600))
+        cropped = crop_captured_image(
+            image,
+            region=CaptureRegion.CLIENT,
+            window_rect=WindowRect(0, 0, 800, 600),
+            client_rect=WindowRect(10, 20, 790, 580),
+        )
+        assert cropped.size == (780, 560)
+
+    def test_is_wgc_available_false_on_non_windows(self) -> None:
+        from nzfz_executor.core.wgc_capture import is_wgc_available
+
+        with patch("sys.platform", "linux"):
+            assert is_wgc_available() is False

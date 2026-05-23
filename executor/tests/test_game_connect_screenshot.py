@@ -236,6 +236,36 @@ class TestScreenshotCaptureFlow:
         assert not tab._is_capturing
         assert tab._refresh_screenshot_button.isEnabled()
 
+    def test_wgc_success_meta_shows_occlusion_support(self, tab: GameConnectTab) -> None:
+        _connect_tab(tab)
+        tab._capture_request_id = 1
+        tab._active_capture_request_id = 1
+        tab._capture_request_generations[1] = tab._connection_generation
+        result = _success_result(
+            backend=CaptureBackendType.WINDOWS_GRAPHICS_CAPTURE,
+            supports_occluded=True,
+        )
+        tab._on_capture_finished(1, result)
+
+        assert "windows_graphics_capture" in tab._screenshot_meta_label.text()
+        assert "遮挡支持：是" in tab._screenshot_meta_label.text()
+
+    def test_fallback_screen_meta_shows_message(self, tab: GameConnectTab) -> None:
+        _connect_tab(tab)
+        tab._capture_request_id = 1
+        tab._active_capture_request_id = 1
+        tab._capture_request_generations[1] = tab._connection_generation
+        result = _success_result(
+            backend=CaptureBackendType.SCREEN,
+            supports_occluded=False,
+            message="Windows Graphics Capture 当前不可用，已使用屏幕截图；若窗口被遮挡，截图内容可能不准确",
+        )
+        tab._on_capture_finished(1, result)
+
+        assert "screen" in tab._screenshot_meta_label.text()
+        assert "遮挡支持：否" in tab._screenshot_meta_label.text()
+        assert "不可用" in tab._screenshot_meta_label.text()
+
     def test_failure_keeps_previous_preview(self, tab: GameConnectTab) -> None:
         _connect_tab(tab)
         tab._on_refresh_screenshot_clicked()
