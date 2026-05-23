@@ -1,4 +1,4 @@
-"""P2-04 执行器运行状态机测试。"""
+"""P2-04/P2-05 执行器运行状态机测试。"""
 
 from __future__ import annotations
 
@@ -59,6 +59,63 @@ class FakeScreenshotTaskRunner:
         self.capture_failed = self._emitter.capture_failed
 
 
+class FakeExecutorTaskRunner:
+    """可控 ExecutorTaskRunner 替身。"""
+
+    def __init__(self, parent=None) -> None:
+        from PySide6.QtCore import QObject, Signal
+
+        class _Emitter(QObject):
+            completed = Signal(int)
+            stopped = Signal(int)
+            failed = Signal(int, str)
+            log = Signal(int, str)
+            progress = Signal(int, int, str)
+            start_rejected = Signal(int, str)
+
+        self._emitter = _Emitter(parent)
+        self.completed = self._emitter.completed
+        self.stopped = self._emitter.stopped
+        self.failed = self._emitter.failed
+        self.log = self._emitter.log
+        self.progress = self._emitter.progress
+        self.start_rejected = self._emitter.start_rejected
+
+        self.start_calls: list[tuple[int, ConnectedWindow | None]] = []
+        self.stop_calls = 0
+        self._running = False
+        self.next_start_result = True
+
+    def start(self, execution_id: int, context: ConnectedWindow | None) -> bool:
+        self.start_calls.append((execution_id, context))
+        if not self.next_start_result:
+            self.start_rejected.emit(execution_id, "当前已有任务正在运行")
+            return False
+        self._running = True
+        return True
+
+    def request_stop(self) -> bool:
+        if not self._running:
+            return False
+        self.stop_calls += 1
+        return True
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def emit_stopped(self, execution_id: int) -> None:
+        self._running = False
+        self.stopped.emit(execution_id)
+
+    def emit_completed(self, execution_id: int) -> None:
+        self._running = False
+        self.completed.emit(execution_id)
+
+    def emit_failed(self, execution_id: int, message: str) -> None:
+        self._running = False
+        self.failed.emit(execution_id, message)
+
+
 @pytest.fixture(scope="session")
 def qapp():
     from PySide6.QtWidgets import QApplication
@@ -72,6 +129,7 @@ def qapp():
 @pytest.fixture
 def tab(qapp, monkeypatch):
     fake_runner_holder: dict[str, FakeTaskRunner] = {}
+    fake_executor_holder: dict[str, FakeExecutorTaskRunner] = {}
     mock_manager = MagicMock()
     mock_manager.is_connected.return_value = False
     mock_manager.get_connected_context.return_value = None
@@ -83,6 +141,11 @@ def tab(qapp, monkeypatch):
 
     def _screenshot_factory(screenshot_manager, parent=None):
         return FakeScreenshotTaskRunner(screenshot_manager, parent)
+
+    def _executor_factory(parent=None):
+        runner = FakeExecutorTaskRunner(parent)
+        fake_executor_holder["runner"] = runner
+        return runner
 
     monkeypatch.setattr(
         "nzfz_executor.ui.tabs.game_connect.WindowManager",
@@ -96,9 +159,14 @@ def tab(qapp, monkeypatch):
         "nzfz_executor.ui.tabs.game_connect.ScreenshotTaskRunner",
         _screenshot_factory,
     )
+    monkeypatch.setattr(
+        "nzfz_executor.ui.tabs.game_connect.ExecutorTaskRunner",
+        _executor_factory,
+    )
     widget = GameConnectTab()
     widget._window_manager = mock_manager
     widget._task_runner = fake_runner_holder["runner"]
+    widget._executor_task_runner = fake_executor_holder["runner"]
     return widget
 
 
@@ -131,6 +199,15 @@ def _select_row(tab: GameConnectTab, row: int = 0) -> None:
     tab._result_table.selectRow(row)
 
 
+def _prepare_ready_tab(tab: GameConnectTab) -> FakeExecutorTaskRunner:
+    connected = _fake_connected()
+    tab._window_manager.get_connected_context.return_value = connected
+    tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
+    runner = tab._executor_task_runner
+    assert isinstance(runner, FakeExecutorTaskRunner)
+    return runner
+
+
 class TestExecutorInitialState:
     def test_initial_not_ready(self, tab: GameConnectTab) -> None:
         assert tab._executor_state == ExecutorRunState.NOT_READY
@@ -159,9 +236,10 @@ class TestExecutorReadyState:
 
 class TestStartStopFlow:
     def test_start_from_ready_enters_running(self, tab: GameConnectTab) -> None:
-        tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
+        runner = _prepare_ready_tab(tab)
         tab._on_start_executor_clicked()
         assert tab._executor_state == ExecutorRunState.RUNNING
+        assert len(runner.start_calls) == 1
         assert tab._start_executor_button.isEnabled() is False
         assert tab._stop_executor_button.isEnabled() is True
 
@@ -173,22 +251,88 @@ class TestStartStopFlow:
         )
 
     def test_stop_from_running_returns_ready_when_connected(self, tab: GameConnectTab) -> None:
-        tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
+        runner = _prepare_ready_tab(tab)
         tab._on_start_executor_clicked()
+        execution_id = tab._active_execution_id
+        assert execution_id is not None
+
         tab._on_stop_executor_clicked()
+        assert tab._executor_state == ExecutorRunState.STOPPING
+        assert runner.stop_calls == 1
+
+        runner.emit_stopped(execution_id)
         assert tab._executor_state == ExecutorRunState.READY
         assert tab._stop_executor_button.isEnabled() is False
 
     def test_stop_no_effect_when_not_running(self, tab: GameConnectTab) -> None:
-        tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
+        _prepare_ready_tab(tab)
         tab._on_stop_executor_clicked()
         assert tab._executor_state == ExecutorRunState.READY
 
     def test_stopping_disables_stop_button(self, tab: GameConnectTab) -> None:
-        tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
+        _prepare_ready_tab(tab)
         tab._on_start_executor_clicked()
         tab._set_executor_state(ExecutorRunState.STOPPING)
         assert tab._stop_executor_button.isEnabled() is False
+
+
+class TestAsyncExecutionResults:
+    def test_completed_returns_ready(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        execution_id = tab._active_execution_id
+        assert execution_id is not None
+
+        runner.emit_completed(execution_id)
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._active_execution_id is None
+
+    def test_failed_clears_active_execution(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        execution_id = tab._active_execution_id
+        assert execution_id is not None
+
+        runner.emit_failed(execution_id, "任务执行失败")
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._active_execution_id is None
+
+    def test_start_rejected_clears_active_execution(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        runner.next_start_result = False
+        tab._on_start_executor_clicked()
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._active_execution_id is None
+
+    def test_stop_timeout_clears_active_execution(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        assert tab._active_execution_id is not None
+
+        tab._on_stop_executor_clicked()
+        tab._on_executor_stop_timeout()
+        assert tab._active_execution_id is None
+        assert tab._executor_state == ExecutorRunState.READY
+
+    def test_stale_completed_is_discarded(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        execution_id = tab._active_execution_id
+        assert execution_id is not None
+
+        tab._active_execution_id = None
+        runner.emit_completed(execution_id)
+        assert tab._executor_state == ExecutorRunState.RUNNING
+
+    def test_generation_mismatch_discards_completed(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        execution_id = tab._active_execution_id
+        assert execution_id is not None
+
+        tab._connection_generation += 1
+        runner.emit_completed(execution_id)
+        assert tab._executor_state == ExecutorRunState.RUNNING
 
 
 class TestConnectionRestrictions:
@@ -263,11 +407,12 @@ class TestScreenshotRestrictions:
 
 class TestConnectionStateEffects:
     def test_running_connection_degraded_to_failed(self, tab: GameConnectTab) -> None:
-        tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
-        tab._set_executor_state(ExecutorRunState.RUNNING)
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
         assert tab._executor_state == ExecutorRunState.FAILED
         assert "连接状态异常" in tab._executor_status_label.text()
+        assert runner.stop_calls == 1
 
     def test_stopping_keeps_stopping_on_connection_change(self, tab: GameConnectTab) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_READY)

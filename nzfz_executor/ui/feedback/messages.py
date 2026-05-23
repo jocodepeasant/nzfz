@@ -64,6 +64,9 @@ class FeedbackCode(Enum):
     EXECUTOR_FAILED = "executor.failed"
     EXECUTOR_START_BLOCKED = "executor.start_blocked"
     EXECUTOR_STOP_REQUIRED = "executor.stop_required"
+    EXECUTOR_STOP_TIMEOUT = "executor.stop_timeout"
+    EXECUTOR_ALREADY_RUNNING = "executor.already_running"
+    EXECUTOR_NO_ACTIVE_TASK = "executor.no_active_task"
 
 
 @dataclass(frozen=True)
@@ -211,11 +214,11 @@ FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
     ),
     FeedbackCode.EXECUTOR_NOT_READY: FeedbackMessage(
         FeedbackLevel.INFO,
-        "执行未就绪",
+        "请先连接游戏窗口",
     ),
     FeedbackCode.EXECUTOR_READY: FeedbackMessage(
         FeedbackLevel.SUCCESS,
-        "执行就绪",
+        "执行就绪，可开始任务",
     ),
     FeedbackCode.EXECUTOR_RUNNING: FeedbackMessage(
         FeedbackLevel.INFO,
@@ -244,6 +247,18 @@ FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
     FeedbackCode.EXECUTOR_STOP_REQUIRED: FeedbackMessage(
         FeedbackLevel.WARNING,
         "请先停止当前任务",
+    ),
+    FeedbackCode.EXECUTOR_STOP_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "任务停止超时，请检查后台任务状态",
+    ),
+    FeedbackCode.EXECUTOR_ALREADY_RUNNING: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前已有任务正在运行",
+    ),
+    FeedbackCode.EXECUTOR_NO_ACTIVE_TASK: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前没有正在运行的任务",
     ),
 }
 
