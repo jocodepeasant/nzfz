@@ -15,6 +15,7 @@ from nzfz_executor.core.models import (
     WindowInfo,
     WindowRect,
 )
+from nzfz_executor.ui.states import ExecutorRunState
 from nzfz_executor.ui.tabs.game_connect import (
     ConnectionUiState,
     GameConnectTab,
@@ -249,7 +250,8 @@ class TestButtonStates:
     def test_initial_buttons_disabled(self, tab: GameConnectTab) -> None:
         assert tab._connect_btn.isEnabled() is False
         assert tab._disconnect_btn.isEnabled() is False
-        assert tab._execute_btn.isEnabled() is False
+        assert tab._start_executor_button.isEnabled() is False
+        assert tab._stop_executor_button.isEnabled() is False
 
     def test_searching_disables_search_and_connect(self, tab: GameConnectTab) -> None:
         tab._set_search_state(SearchUiState.SEARCHING)
@@ -279,22 +281,25 @@ class TestButtonStates:
         assert tab._search_btn.isEnabled() is False
         assert tab._connect_btn.isEnabled() is False
         assert tab._disconnect_btn.isEnabled() is False
-        assert tab._execute_btn.isEnabled() is False
+        assert tab._start_executor_button.isEnabled() is False
 
     def test_connected_ready_enables_disconnect_and_execute(self, tab: GameConnectTab) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
         assert tab._disconnect_btn.isEnabled() is True
-        assert tab._execute_btn.isEnabled() is True
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._start_executor_button.isEnabled() is True
 
     def test_connected_not_ready_execute_disabled(self, tab: GameConnectTab) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
         assert tab._disconnect_btn.isEnabled() is True
-        assert tab._execute_btn.isEnabled() is False
+        assert tab._executor_state == ExecutorRunState.NOT_READY
+        assert tab._start_executor_button.isEnabled() is False
 
     def test_connected_unhealthy_execute_disabled(self, tab: GameConnectTab) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_UNHEALTHY)
         assert tab._disconnect_btn.isEnabled() is True
-        assert tab._execute_btn.isEnabled() is False
+        assert tab._executor_state == ExecutorRunState.NOT_READY
+        assert tab._start_executor_button.isEnabled() is False
 
     def test_after_disconnect_with_selection_connect_enabled(self, tab: GameConnectTab) -> None:
         tab._fill_search_results([_fake_window_info()])

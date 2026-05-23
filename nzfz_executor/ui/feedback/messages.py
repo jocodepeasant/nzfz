@@ -55,6 +55,16 @@ class FeedbackCode(Enum):
     SCREENSHOT_UNAVAILABLE = "screenshot.unavailable"
     SCREENSHOT_BACKEND_LIMITED = "screenshot.backend_limited"
 
+    EXECUTOR_NOT_READY = "executor.not_ready"
+    EXECUTOR_READY = "executor.ready"
+    EXECUTOR_RUNNING = "executor.running"
+    EXECUTOR_STOPPING = "executor.stopping"
+    EXECUTOR_STOPPED = "executor.stopped"
+    EXECUTOR_COMPLETED = "executor.completed"
+    EXECUTOR_FAILED = "executor.failed"
+    EXECUTOR_START_BLOCKED = "executor.start_blocked"
+    EXECUTOR_STOP_REQUIRED = "executor.stop_required"
+
 
 @dataclass(frozen=True)
 class FeedbackMessage:
@@ -198,6 +208,42 @@ FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
     FeedbackCode.SCREENSHOT_BACKEND_LIMITED: FeedbackMessage(
         FeedbackLevel.WARNING,
         "当前截图后端不支持被遮挡窗口截图，若窗口被遮挡，截图内容可能不准确",
+    ),
+    FeedbackCode.EXECUTOR_NOT_READY: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "执行未就绪",
+    ),
+    FeedbackCode.EXECUTOR_READY: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "执行就绪",
+    ),
+    FeedbackCode.EXECUTOR_RUNNING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "任务执行中",
+    ),
+    FeedbackCode.EXECUTOR_STOPPING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "正在停止任务",
+    ),
+    FeedbackCode.EXECUTOR_STOPPED: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "任务已停止",
+    ),
+    FeedbackCode.EXECUTOR_COMPLETED: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "任务执行完成",
+    ),
+    FeedbackCode.EXECUTOR_FAILED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "任务执行失败",
+    ),
+    FeedbackCode.EXECUTOR_START_BLOCKED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前无法开始执行",
+    ),
+    FeedbackCode.EXECUTOR_STOP_REQUIRED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "请先停止当前任务",
     ),
 }
 

@@ -34,6 +34,7 @@ from nzfz_executor.ui.feedback import (
     get_feedback_level,
     get_feedback_text,
 )
+from nzfz_executor.ui.states import ExecutorRunState
 from nzfz_executor.ui.workers import ScreenshotTaskRunner, WindowTaskRunner
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,7 @@ class GameConnectTab(QWidget):
 
         self._search_state = SearchUiState.IDLE
         self._connection_state = ConnectionUiState.DISCONNECTED
+        self._executor_state = ExecutorRunState.NOT_READY
         self._search_message = ""
         self._connection_message = ""
         self._search_feedback_code: FeedbackCode | None = None
@@ -150,7 +152,9 @@ class GameConnectTab(QWidget):
         self._result_table: QTableWidget
         self._connect_btn: QPushButton
         self._disconnect_btn: QPushButton
-        self._execute_btn: QPushButton
+        self._start_executor_button: QPushButton
+        self._stop_executor_button: QPushButton
+        self._executor_status_label: QLabel
         self._indicator: QLabel
         self._status_text: QLabel
         self._execute_status_label: QLabel
@@ -163,6 +167,7 @@ class GameConnectTab(QWidget):
         self._init_ui()
         self._set_search_state(SearchUiState.IDLE)
         self._set_connection_state(ConnectionUiState.DISCONNECTED)
+        self._set_executor_state(ExecutorRunState.NOT_READY)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.cleanup()
@@ -308,6 +313,7 @@ class GameConnectTab(QWidget):
         self._connection_feedback_level = feedback_level
         if old_state != state:
             logger.info("连接状态变更: %s → %s", old_state.value, state.value)
+        self._on_connection_state_changed_for_executor(state)
         self._apply_ui_state()
 
     def _apply_feedback_style(self, label: QLabel, level: FeedbackLevel) -> None:
@@ -331,6 +337,116 @@ class GameConnectTab(QWidget):
         level = get_feedback_level(code)
         self._execute_status_label.setText(text)
         self._apply_feedback_style(self._execute_status_label, level)
+
+    def _show_executor_feedback(self, code: FeedbackCode, **kwargs: object) -> None:
+        text = get_feedback_text(code, **kwargs)
+        level = get_feedback_level(code)
+        self._executor_status_label.setText(text)
+        self._apply_feedback_style(self._executor_status_label, level)
+
+    def _show_executor_feedback_by_state(self, state: ExecutorRunState) -> None:
+        mapping = {
+            ExecutorRunState.NOT_READY: FeedbackCode.EXECUTOR_NOT_READY,
+            ExecutorRunState.READY: FeedbackCode.EXECUTOR_READY,
+            ExecutorRunState.RUNNING: FeedbackCode.EXECUTOR_RUNNING,
+            ExecutorRunState.STOPPING: FeedbackCode.EXECUTOR_STOPPING,
+            ExecutorRunState.STOPPED: FeedbackCode.EXECUTOR_STOPPED,
+            ExecutorRunState.COMPLETED: FeedbackCode.EXECUTOR_COMPLETED,
+            ExecutorRunState.FAILED: FeedbackCode.EXECUTOR_FAILED,
+        }
+        self._show_executor_feedback(mapping[state])
+
+    def _is_executor_busy(self) -> bool:
+        return self._executor_state in {
+            ExecutorRunState.RUNNING,
+            ExecutorRunState.STOPPING,
+        }
+
+    def _is_executor_ready(self) -> bool:
+        return (
+            self._connection_state == ConnectionUiState.CONNECTED_READY
+            and not self._is_capturing
+            and not self._is_executor_busy()
+        )
+
+    def _set_executor_state(
+        self,
+        state: ExecutorRunState,
+        message: str | None = None,
+    ) -> None:
+        old_state = self._executor_state
+        if self._executor_state == state and message is None:
+            self._update_executor_controls()
+            self._update_connection_controls_state()
+            self._update_screenshot_button_state()
+            return
+
+        self._executor_state = state
+        if old_state != state:
+            logger.info("执行器状态变更: %s → %s", old_state.value, state.value)
+
+        if message is not None:
+            self._executor_status_label.setText(message)
+            self._apply_feedback_style(
+                self._executor_status_label,
+                FeedbackLevel.ERROR if state == ExecutorRunState.FAILED else FeedbackLevel.INFO,
+            )
+        else:
+            self._show_executor_feedback_by_state(state)
+
+        self._update_executor_controls()
+        self._update_connection_controls_state()
+        self._update_screenshot_button_state()
+
+    def _refresh_executor_ready_state(self) -> None:
+        if self._is_executor_busy():
+            return
+        if self._is_executor_ready():
+            self._set_executor_state(ExecutorRunState.READY)
+        else:
+            self._set_executor_state(ExecutorRunState.NOT_READY)
+
+    def _update_executor_controls(self) -> None:
+        can_start = self._executor_state == ExecutorRunState.READY
+        can_stop = self._executor_state == ExecutorRunState.RUNNING
+        self._start_executor_button.setEnabled(can_start)
+        self._stop_executor_button.setEnabled(can_stop)
+
+    def _ensure_can_change_connection(self) -> bool:
+        if self._is_executor_busy():
+            self._show_executor_feedback(FeedbackCode.EXECUTOR_STOP_REQUIRED)
+            return False
+        return True
+
+    def _on_connection_state_changed_for_executor(
+        self,
+        state: ConnectionUiState,
+    ) -> None:
+        if self._executor_state == ExecutorRunState.RUNNING:
+            if state != ConnectionUiState.CONNECTED_READY:
+                self._set_executor_state(
+                    ExecutorRunState.FAILED,
+                    "连接状态异常，任务执行失败",
+                )
+                return
+        if not self._is_executor_busy():
+            self._refresh_executor_ready_state()
+
+    def _on_start_executor_clicked(self) -> None:
+        if self._executor_state != ExecutorRunState.READY:
+            self._show_executor_feedback(FeedbackCode.EXECUTOR_START_BLOCKED)
+            return
+        if self._is_capturing:
+            self._show_executor_feedback(FeedbackCode.EXECUTOR_START_BLOCKED)
+            return
+        self._set_executor_state(ExecutorRunState.RUNNING)
+
+    def _on_stop_executor_clicked(self) -> None:
+        if self._executor_state != ExecutorRunState.RUNNING:
+            return
+        self._set_executor_state(ExecutorRunState.STOPPING)
+        self._set_executor_state(ExecutorRunState.STOPPED)
+        self._refresh_executor_ready_state()
 
     def _show_hint_feedback(self, code: FeedbackCode, **kwargs: object) -> None:
         text = get_feedback_text(code, **kwargs)
@@ -388,34 +504,7 @@ class GameConnectTab(QWidget):
         return self._search_results[row]
 
     def _apply_ui_state(self) -> None:
-        selected_window = self._get_selected_window_info()
-
-        is_connecting = self._connection_state == ConnectionUiState.CONNECTING
-        is_searching = self._search_state == SearchUiState.SEARCHING
-
-        can_connect = (
-            not is_connecting
-            and not is_searching
-            and self._search_state == SearchUiState.HAS_RESULT
-            and selected_window is not None
-            and not selected_window.is_minimized
-        )
-
-        can_disconnect = self._connection_state in {
-            ConnectionUiState.CONNECTED_READY,
-            ConnectionUiState.CONNECTED_NOT_READY,
-            ConnectionUiState.CONNECTED_UNHEALTHY,
-        }
-
-        can_execute = self._connection_state == ConnectionUiState.CONNECTED_READY
-
-        self._search_input.setEnabled(not is_connecting)
-        self._search_btn.setEnabled(not is_connecting and not is_searching)
-        self._result_table.setEnabled(not is_connecting)
-
-        self._connect_btn.setEnabled(can_connect)
-        self._disconnect_btn.setEnabled(can_disconnect)
-        self._execute_btn.setEnabled(can_execute)
+        self._update_connection_controls_state()
 
         self._window_info.setVisible(self._is_connected_state())
 
@@ -423,6 +512,42 @@ class GameConnectTab(QWidget):
         self._update_connection_status_label()
         self._update_execute_status_label()
         self._update_screenshot_button_state()
+
+    def _update_connection_controls_state(self) -> None:
+        selected_window = self._get_selected_window_info()
+
+        is_connecting = self._connection_state == ConnectionUiState.CONNECTING
+        is_searching = self._search_state == SearchUiState.SEARCHING
+        executor_busy = self._is_executor_busy()
+
+        can_connect = (
+            not is_connecting
+            and not is_searching
+            and not executor_busy
+            and self._search_state == SearchUiState.HAS_RESULT
+            and selected_window is not None
+            and not selected_window.is_minimized
+        )
+
+        can_disconnect = (
+            not executor_busy
+            and self._connection_state in {
+                ConnectionUiState.CONNECTED_READY,
+                ConnectionUiState.CONNECTED_NOT_READY,
+                ConnectionUiState.CONNECTED_UNHEALTHY,
+            }
+        )
+
+        self._search_input.setEnabled(not is_connecting and not executor_busy)
+        self._search_btn.setEnabled(
+            not is_connecting and not is_searching and not executor_busy,
+        )
+        self._result_table.setEnabled(not is_connecting and not executor_busy)
+
+        self._connect_btn.setEnabled(can_connect)
+        self._disconnect_btn.setEnabled(can_disconnect)
+
+        self._update_executor_controls()
 
     def _update_search_status_label(self) -> None:
         if self._search_message:
@@ -567,6 +692,7 @@ class GameConnectTab(QWidget):
         layout.addLayout(self._create_search_section())
         layout.addLayout(self._create_action_section())
         layout.addLayout(self._create_status_section())
+        layout.addLayout(self._create_executor_area())
         layout.addLayout(self._create_screenshot_area())
         layout.addStretch()
 
@@ -620,12 +746,33 @@ class GameConnectTab(QWidget):
         self._disconnect_btn.clicked.connect(self._on_disconnect)
         row.addWidget(self._disconnect_btn)
 
-        self._execute_btn = QPushButton("开始执行")
-        self._execute_btn.setEnabled(False)
-        row.addWidget(self._execute_btn)
+        row.addStretch()
+        section.addLayout(row)
+        return section
+
+    def _create_executor_area(self) -> QVBoxLayout:
+        section = QVBoxLayout()
+        section.setSpacing(6)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+
+        self._start_executor_button = QPushButton("开始执行")
+        self._start_executor_button.setEnabled(False)
+        self._start_executor_button.clicked.connect(self._on_start_executor_clicked)
+        row.addWidget(self._start_executor_button)
+
+        self._stop_executor_button = QPushButton("停止执行")
+        self._stop_executor_button.setEnabled(False)
+        self._stop_executor_button.clicked.connect(self._on_stop_executor_clicked)
+        row.addWidget(self._stop_executor_button)
 
         row.addStretch()
         section.addLayout(row)
+
+        self._executor_status_label = QLabel("执行未就绪")
+        section.addWidget(self._executor_status_label)
+
         return section
 
     def _create_status_section(self) -> QVBoxLayout:
@@ -692,6 +839,8 @@ class GameConnectTab(QWidget):
             return
         if self._connecting:
             return
+        if self._is_executor_busy():
+            return
         self._search_debounce_timer.start()
 
     def _trigger_debounced_search(self) -> None:
@@ -714,6 +863,8 @@ class GameConnectTab(QWidget):
             self._handle_empty_keyword()
             return
         if self._connecting:
+            return
+        if not self._ensure_can_change_connection():
             return
 
         self._search_request_id += 1
@@ -819,6 +970,9 @@ class GameConnectTab(QWidget):
         self._apply_ui_state()
 
     def _on_connect(self) -> None:
+        if not self._ensure_can_change_connection():
+            return
+
         window_info = self._get_selected_window_info()
         if window_info is None:
             logger.warning("点击连接按钮但无选中行")
@@ -984,6 +1138,8 @@ class GameConnectTab(QWidget):
             self._health_timer.start()
 
     def _on_disconnect(self) -> None:
+        if not self._ensure_can_change_connection():
+            return
         logger.info("用户点击断开连接按钮")
         self._do_disconnect()
 
@@ -1154,6 +1310,7 @@ class GameConnectTab(QWidget):
             and self._is_connected_state()
             and not self._connecting
             and not self._is_capturing
+            and not self._is_executor_busy()
         )
         self._refresh_screenshot_button.setEnabled(enabled)
 
@@ -1197,6 +1354,7 @@ class GameConnectTab(QWidget):
         self._is_capturing = True
         self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_CAPTURING)
         self._update_screenshot_button_state()
+        self._refresh_executor_ready_state()
 
         self._capture_timeout_timer.start(SCREENSHOT_TIMEOUT_MS)
 
@@ -1245,6 +1403,7 @@ class GameConnectTab(QWidget):
             self._show_screenshot_failed_result(result)
 
         self._update_screenshot_button_state()
+        self._refresh_executor_ready_state()
 
     def _on_capture_failed(self, request_id: int, message: str) -> None:
         if not self._is_active_capture_result(request_id):
@@ -1258,6 +1417,7 @@ class GameConnectTab(QWidget):
         logger.warning("Screenshot worker failed: %s", message)
         self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_FAILED)
         self._update_screenshot_button_state()
+        self._refresh_executor_ready_state()
 
     def _on_capture_timeout(self) -> None:
         request_id = self._active_capture_request_id
@@ -1269,6 +1429,7 @@ class GameConnectTab(QWidget):
         self._is_capturing = False
         self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_TIMEOUT)
         self._update_screenshot_button_state()
+        self._refresh_executor_ready_state()
 
     def _show_screenshot_failed_result(self, result: ScreenshotResult) -> None:
         if result.message:
