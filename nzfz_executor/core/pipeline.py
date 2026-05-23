@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from nzfz_executor.actions.base import ActionResult
 from nzfz_executor.context import ExecutionContext
-
-if TYPE_CHECKING:
-    from nzfz_executor.actions.base import ActionRegistry
-    from nzfz_executor.events import EventBus
-    from nzfz_executor.core.dispatcher import ActionDispatcher
+from nzfz_executor.core.dispatcher import ActionDispatcher
+from nzfz_executor.events import EventBus
 
 
 class ExecutionPipeline:
@@ -23,30 +20,32 @@ class ExecutionPipeline:
         retry_manager: Any,
         event_bus: EventBus,
     ) -> None:
-        """初始化执行管线。
-
-        Args:
-            dispatcher: 动作分发器，负责将动作分发到对应处理器。
-            condition_evaluator: 条件评估器，判断动作前置条件是否满足。
-            retry_manager: 重试管理器，处理动作执行失败后的重试逻辑。
-            event_bus: 事件总线，用于管线执行过程中的事件通知。
-        """
         self._dispatcher = dispatcher
         self._condition_evaluator = condition_evaluator
         self._retry_manager = retry_manager
         self._event_bus = event_bus
 
     def run(self, actions: list[dict[str, Any]], context: ExecutionContext) -> list[ActionResult]:
-        """顺序执行一组动作，返回每个动作的执行结果。
+        results: list[ActionResult] = []
+        for action_data in actions:
+            context.action_data = action_data
+            conditions = action_data.get("conditions") or {}
+            if not self._condition_evaluator.evaluate(conditions, context):
+                result = ActionResult(
+                    success=False,
+                    skipped=True,
+                    error="条件未满足",
+                )
+                results.append(result)
+                self._event_bus.emit("action_completed", {"action": action_data, "result": result})
+                continue
 
-        Args:
-            actions: 动作数据列表，每个元素为动作类型及参数的字典。
-            context: 执行上下文，提供运行时信息。
+            result = self._dispatcher.dispatch(action_data, context)
+            results.append(result)
+            self._event_bus.emit("action_completed", {"action": action_data, "result": result})
 
-        Returns:
-            list[ActionResult]: 所有动作的执行结果列表。
-
-        Raises:
-            NotImplementedError: 子类或后续实现需覆盖此方法。
-        """
-        raise NotImplementedError
+            if not result.success:
+                on_fail = action_data.get("on_fail") or {}
+                if on_fail.get("policy") == "abort":
+                    break
+        return results

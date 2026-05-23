@@ -179,14 +179,14 @@ class ConnectOptions:
     """
     窗口连接选项。
 
-    当前版本固定前台连接语义：
-    - 默认连接时激活窗口
-    - 最小化窗口不自动恢复
-    - 当前版本不因 control_mode=BACKGROUND 跳过激活逻辑
+    - activate_on_connect=True：连接时尝试将目标窗口置前（自动化执行场景）
+    - activate_on_connect=False：仅绑定窗口上下文，不切换前台（GUI 配置场景）
+    - 最小化窗口不自动恢复（restore_if_minimized 当前不生效）
+    - control_mode=BACKGROUND 当前仍会按前台流程连接（仅记录日志）
     """
 
     activate_on_connect: bool = True
-    """连接前是否激活窗口"""
+    """连接时是否激活目标窗口（置前）"""
     restore_if_minimized: bool = False
     """最小化时是否自动恢复（当前版本不启用）"""
     control_mode: ControlMode = ControlMode.FOREGROUND

@@ -14,7 +14,11 @@ from PySide6.QtWidgets import (
 
 from nzfz_executor.core.window_manager import WindowManager
 from nzfz_executor.core.models import (
-    WindowInfo, HealthStatus, ConnectResult, HealthCheckResult,
+    WindowInfo,
+    HealthStatus,
+    ConnectResult,
+    HealthCheckResult,
+    ConnectOptions,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,7 +77,10 @@ class ConnectWorker(QThread):
             self._window.pid,
         )
         try:
-            result = self._manager.connect_window(self._window)
+            result = self._manager.connect_window(
+                self._window,
+                ConnectOptions(activate_on_connect=False),
+            )
             self.finished.emit(result)
             logger.info(
                 "后台线程连接窗口完成, success=%s",
@@ -108,9 +115,14 @@ class GameConnectTab(QWidget):
 
         self._health_timer: QTimer = QTimer(self)
         """健康检测定时器，连接成功后每秒触发一次"""
+        self._health_timer.setInterval(1000)
+        self._health_timer.timeout.connect(self._on_health_check)
 
         self._timeout_timer: QTimer = QTimer(self)
         """连接超时定时器，单次触发，超时时间为 5 秒"""
+        self._timeout_timer.setSingleShot(True)
+        self._timeout_timer.setInterval(5000)
+        self._timeout_timer.timeout.connect(self._on_connect_timeout)
 
         self._worker: ConnectWorker | None = None
         """当前正在运行的连接工作线程，未运行时为 None"""
@@ -156,6 +168,11 @@ class GameConnectTab(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
+        self._status_label = QLabel()
+        self._status_label.setWordWrap(True)
+        self._status_label.setVisible(False)
+        layout.addWidget(self._status_label)
+
         layout.addLayout(self._create_search_section())
         layout.addLayout(self._create_action_section())
         layout.addLayout(self._create_status_section())
@@ -177,7 +194,7 @@ class GameConnectTab(QWidget):
         search_row.setSpacing(8)
 
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("输入进程名或窗口标题")
+        self._search_input.setPlaceholderText("输入窗口标题、进程名或 PID")
         search_row.addWidget(self._search_input)
 
         self._search_btn = QPushButton("搜索")
@@ -186,8 +203,8 @@ class GameConnectTab(QWidget):
 
         section.addLayout(search_row)
 
-        self._result_table = QTableWidget(0, 3)
-        self._result_table.setHorizontalHeaderLabels(["窗口标题", "进程名", "PID"])
+        self._result_table = QTableWidget(0, 4)
+        self._result_table.setHorizontalHeaderLabels(["窗口标题", "进程名", "PID", "状态"])
         self._result_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._result_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self._result_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -302,7 +319,7 @@ class GameConnectTab(QWidget):
 
         if not self._search_results:
             self._result_table.setRowCount(1)
-            self._result_table.setSpan(0, 0, 1, 3)
+            self._result_table.setSpan(0, 0, 1, 4)
             empty_item = QTableWidgetItem("无匹配结果")
             empty_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._result_table.setItem(0, 0, empty_item)
@@ -318,19 +335,31 @@ class GameConnectTab(QWidget):
             pid_item = QTableWidgetItem(str(win.pid))
             pid_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._result_table.setItem(i, 2, pid_item)
+            status_text = "最小化" if win.is_minimized else "正常"
+            status_item = QTableWidgetItem(status_text)
+            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if win.is_minimized:
+                from PySide6.QtGui import QColor
+
+                status_item.setForeground(QColor("#f9e2af"))
+            self._result_table.setItem(i, 3, status_item)
 
     def _on_selection_changed(self) -> None:
-        """表格选中行变化处理。
-
-        当存在选中行时启用连接按钮，否则禁用。
-        """
+        """表格选中行变化处理。"""
         selected = self._result_table.selectedIndexes()
-        if selected:
-            self._connect_btn.setEnabled(True)
-            logger.debug("表格选中行变化, 当前有选中行")
-        else:
+        if not selected:
             self._connect_btn.setEnabled(False)
-            logger.debug("表格选中行变化, 当前无选中行")
+            return
+
+        row = selected[0].row()
+        if 0 <= row < len(self._search_results):
+            window_info = self._search_results[row]
+            if window_info.is_minimized:
+                self._connect_btn.setEnabled(False)
+                self._show_tip("⚠ 窗口已最小化，请恢复窗口后重试")
+                return
+
+        self._connect_btn.setEnabled(True)
 
     def _on_connect(self) -> None:
         """连接按钮点击处理。
@@ -353,6 +382,10 @@ class GameConnectTab(QWidget):
             return
 
         window_info = self._search_results[row]
+        if window_info.is_minimized:
+            self._show_tip("⚠ 窗口已最小化，请恢复窗口后重试")
+            return
+
         logger.info(
             "发起连接请求, title=%s, pid=%s, 当前状态=%s",
             window_info.title,
@@ -395,13 +428,6 @@ class GameConnectTab(QWidget):
         self._connect_btn.setEnabled(False)
         self._disconnect_btn.setEnabled(False)
 
-        self._timeout_timer.setSingleShot(True)
-        self._timeout_timer.setInterval(5000)
-        try:
-            self._timeout_timer.timeout.disconnect(self._on_connect_timeout)
-        except (TypeError, RuntimeError):
-            pass
-        self._timeout_timer.timeout.connect(self._on_connect_timeout)
         self._timeout_timer.start()
         logger.debug("连接超时计时器已启动, timeout=5s")
 
@@ -437,23 +463,18 @@ class GameConnectTab(QWidget):
             result.error_message,
         )
 
-        if result.success:
+        if result.success and result.window is not None:
             self._current_window = self._worker._window  # type: ignore[union-attr]
+            connected = result.window
             self._set_status(ConnectState.CONNECTED)
 
             self._window_info.setText(
-                f"窗口标题：{self._current_window.title}  "
-                f"PID：{self._current_window.pid}  "
-                f"分辨率：{self._current_window.width}×{self._current_window.height}"
+                f"窗口标题：{connected.title}  "
+                f"PID：{connected.pid}  "
+                f"客户区：{connected.client_size_text}"
             )
             self._window_info.setVisible(True)
 
-            self._health_timer.setInterval(1000)
-            try:
-                self._health_timer.timeout.disconnect(self._on_health_check)
-            except (TypeError, RuntimeError):
-                pass
-            self._health_timer.timeout.connect(self._on_health_check)
             self._health_timer.start()
             logger.info("连接成功，健康检测定时器已启动, interval=1s")
         else:
@@ -585,7 +606,14 @@ class GameConnectTab(QWidget):
         断开按钮：仅在已连接或连接异常时启用
         """
         has_selection = bool(self._result_table.selectedIndexes())
-        self._connect_btn.setEnabled(has_selection)
+        can_connect = has_selection
+        if has_selection:
+            selected_rows = self._result_table.selectionModel().selectedRows()
+            if selected_rows:
+                row = selected_rows[0].row()
+                if 0 <= row < len(self._search_results):
+                    can_connect = not self._search_results[row].is_minimized
+        self._connect_btn.setEnabled(can_connect)
 
         self._disconnect_btn.setEnabled(
             self._state in (ConnectState.CONNECTED, ConnectState.ABNORMAL)
@@ -602,10 +630,7 @@ class GameConnectTab(QWidget):
     # ------------------------------------------------------------------
 
     def _show_tip(self, message: str) -> None:
-        """在页签顶部状态栏显示提示信息。
-
-        Args:
-            message: 提示信息文本
-        """
-        logging.warning(message)
+        """在页签顶部状态栏显示提示信息。"""
         logger.warning("UI 提示: %s", message)
+        self._status_label.setText(message)
+        self._status_label.setVisible(True)

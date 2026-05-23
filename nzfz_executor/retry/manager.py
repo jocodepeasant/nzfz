@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
+from nzfz_executor.actions.base import ActionResult
 from nzfz_executor.retry.policy import OnConditionFailedConfig, OnFailPolicy, RetryPolicy
-
-if TYPE_CHECKING:
-    from nzfz_executor.actions.base import ActionResult
 
 
 class RetryManager:
@@ -23,26 +21,11 @@ class RetryManager:
         """全局重试配置。"""
 
     def resolve_retry_config(self, action_retry: dict | None) -> RetryPolicy:
-        """解析动作级别的重试配置，合并全局默认值。
-
-        Args:
-            action_retry: 动作级别的重试配置字典，可为 None。
-
-        Returns:
-            合并后的重试策略实例。
-        """
-        raise NotImplementedError
+        return RetryPolicy.from_dict(action_retry)
 
     def resolve_on_condition_failed(self, action_config: dict | None) -> OnConditionFailedConfig:
-        """解析动作的条件失败配置。
-
-        Args:
-            action_config: 动作配置字典，可为 None。
-
-        Returns:
-            条件失败配置实例。
-        """
-        raise NotImplementedError
+        config = action_config or {}
+        return OnConditionFailedConfig.from_dict(config.get("on_condition_failed"))
 
     def execute_with_retry(
         self,
@@ -51,15 +34,23 @@ class RetryManager:
         retry_policy: RetryPolicy,
         on_fail_policy: OnFailPolicy,
     ) -> ActionResult:
-        """带重试逻辑执行动作，支持验证与失败策略。
+        del verify_fn, on_fail_policy
+        last_result: ActionResult | None = None
+        attempts = max(1, retry_policy.max_count + 1)
+        for attempt in range(1, attempts + 1):
+            last_result = action_fn()
+            if last_result.success:
+                return ActionResult(
+                    success=True,
+                    attempts=attempt,
+                    data=last_result.data,
+                )
+            if attempt < attempts and retry_policy.interval_ms > 0:
+                import time
 
-        Args:
-            action_fn: 动作执行函数，返回 ActionResult。
-            verify_fn: 验证函数，返回是否满足条件，可为 None。
-            retry_policy: 重试策略。
-            on_fail_policy: 失败处理策略。
-
-        Returns:
-            动作执行结果。
-        """
-        raise NotImplementedError
+                time.sleep(retry_policy.interval_ms / 1000.0)
+        return ActionResult(
+            success=False,
+            attempts=attempts,
+            error=last_result.error if last_result else "动作执行失败",
+        )

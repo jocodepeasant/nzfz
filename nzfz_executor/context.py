@@ -34,3 +34,12 @@ class ExecutionContext:
     state: ExecutionState = field(default_factory=ExecutionState)
     config: ExecutorConfig | None = None
     action_data: dict[str, Any] = field(default_factory=dict)
+    connected_window: Any | None = None
+    """core.models.ConnectedWindow，供动作层访问完整连接上下文。"""
+
+    def set_window_from_connected(self, connected: Any) -> None:
+        """从 ConnectedWindow 同步 runtime WindowInfo 与 connected_window。"""
+        from nzfz_executor.runtime.window import from_connected_window
+
+        self.connected_window = connected
+        self.window = from_connected_window(connected)
