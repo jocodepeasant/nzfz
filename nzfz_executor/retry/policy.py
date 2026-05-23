@@ -24,8 +24,14 @@ class RetryPolicy:
 
     @classmethod
     def from_dict(cls, d: dict | None) -> RetryPolicy:
-        """从字典构建重试策略实例。"""
-        raise NotImplementedError
+        if not d:
+            return cls()
+        return cls(
+            max_count=int(d.get("max_count", 3)),
+            interval_ms=int(d.get("interval_ms", 500)),
+            reset_view_before_retry=bool(d.get("reset_view_before_retry", False)),
+            micro_adjust_on_retry=bool(d.get("micro_adjust_on_retry", False)),
+        )
 
 
 class OnFailPolicy(Enum):
@@ -63,5 +69,16 @@ class OnConditionFailedConfig:
 
     @classmethod
     def from_dict(cls, d: dict | None) -> OnConditionFailedConfig:
-        """从字典构建条件失败配置实例。"""
-        raise NotImplementedError
+        if not d:
+            return cls()
+        policy_str = str(d.get("policy", "wait")).lower()
+        policy = (
+            OnConditionFailedPolicy.SKIP
+            if policy_str == "skip"
+            else OnConditionFailedPolicy.WAIT
+        )
+        return cls(
+            policy=policy,
+            timeout_ms=int(d.get("timeout_ms", 30000)),
+            then=str(d.get("then", "retry_condition")),
+        )

@@ -28,3 +28,6 @@ dist/
 
 # OS
 Thumbs.db
+
+# Trae AI Agent working files
+.trae/

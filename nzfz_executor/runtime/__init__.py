@@ -3,11 +3,12 @@
 from nzfz_executor.runtime.capture import CaptureBackend, CaptureConfig, ScreenCapture
 from nzfz_executor.runtime.input import InputController
 from nzfz_executor.runtime.overlay import OverlayRenderer
-from nzfz_executor.runtime.window import WindowInfo, WindowManager
+from nzfz_executor.runtime.window import WindowInfo, WindowManager, from_connected_window
 
 __all__ = [
     "WindowInfo",
     "WindowManager",
+    "from_connected_window",
     "ScreenCapture",
     "CaptureBackend",
     "CaptureConfig",

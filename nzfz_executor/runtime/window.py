@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from nzfz_executor.core.models import ConnectedWindow
 
 
 @dataclass
@@ -15,6 +19,19 @@ class WindowInfo:
     width: int
     height: int
     title: str = ""
+
+
+def from_connected_window(connected: ConnectedWindow) -> WindowInfo:
+    """将 core 层 ConnectedWindow 转换为 runtime 层 WindowInfo。"""
+    rect = connected.client_rect
+    return WindowInfo(
+        hwnd=connected.hwnd,
+        left=rect.left,
+        top=rect.top,
+        width=rect.width,
+        height=rect.height,
+        title=connected.title,
+    )
 
 
 class WindowManager:
