@@ -16,7 +16,13 @@ from nzfz_executor.config import ExecutorConfig
 from nzfz_executor.context import ExecutionContext
 from nzfz_executor.core.dispatcher import ActionDispatcher
 from nzfz_executor.core.engine import ExecutorEngine
-from nzfz_executor.core.models import ConnectedWindow, WindowInfo, WindowRect, ConnectOptions
+from nzfz_executor.core.models import (
+    ConnectedWindow,
+    WindowInfo,
+    WindowRect,
+    ConnectOptions,
+    HealthStatus,
+)
 from nzfz_executor.core.pipeline import ExecutionPipeline
 from nzfz_executor.core.scheduler import WaveScheduler
 from nzfz_executor.core.window_manager import WindowManager
@@ -356,3 +362,182 @@ def test_connect_rejects_when_already_connected(mock_validate: MagicMock) -> Non
     assert manager.connected_window is existing
     assert manager.last_error is not None
     assert "请先断开" in manager.last_error
+
+
+def test_check_health_not_connected() -> None:
+    manager = WindowManager()
+    result = manager.check_health()
+    assert result.status == HealthStatus.NOT_CONNECTED
+    assert result.message == "未连接游戏窗口"
+    assert result.is_connected is False
+    assert result.is_ready is False
+    assert result.checked_at is not None
+    assert manager.last_error is None
+
+
+def _mock_healthy_win32(
+    mock_win32gui: MagicMock,
+    mock_psutil: MagicMock,
+    *,
+    foreground_hwnd: int = 42,
+) -> None:
+    mock_win32gui.IsWindow.return_value = True
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.IsIconic.return_value = False
+    mock_win32gui.GetWindowRect.return_value = (0, 0, 800, 600)
+    mock_win32gui.GetClientRect.return_value = (0, 0, 800, 600)
+    mock_win32gui.ClientToScreen.side_effect = lambda _hwnd, pt: pt
+    mock_win32gui.GetForegroundWindow.return_value = foreground_hwnd
+    mock_win32gui.GetWindowText.return_value = "Test"
+
+    mock_process = MagicMock()
+    mock_process.is_running.return_value = True
+    mock_process.status.return_value = "running"
+    mock_process.name.return_value = "test.exe"
+    mock_psutil.Process.return_value = mock_process
+    mock_psutil.NoSuchProcess = type("NoSuchProcess", (Exception,), {})
+    mock_psutil.STATUS_ZOMBIE = "zombie"
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_healthy_foreground(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    manager._connected_window = _fake_connected_window()
+    _mock_healthy_win32(mock_win32gui, mock_psutil, foreground_hwnd=42)
+
+    result = manager.check_health()
+
+    assert result.status == HealthStatus.HEALTHY
+    assert result.is_foreground is True
+    assert result.is_ready is True
+    assert result.message == "窗口连接正常"
+    assert manager.last_error is None
+    assert manager.connected_window is not None
+    assert manager.connected_window.window_rect.width == 800
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_healthy_not_foreground(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    manager._connected_window = _fake_connected_window()
+    _mock_healthy_win32(mock_win32gui, mock_psutil, foreground_hwnd=99)
+
+    result = manager.check_health()
+
+    assert result.status == HealthStatus.HEALTHY
+    assert result.is_foreground is False
+    assert result.is_ready is False
+    assert result.message == "窗口连接正常，但当前不在前台"
+    assert manager.last_error is None
+    assert manager.is_connected() is True
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_minimized_keeps_connection(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    connected = _fake_connected_window()
+    manager._connected_window = connected
+
+    mock_win32gui.IsWindow.return_value = True
+    mock_win32gui.IsWindowVisible.return_value = True
+    mock_win32gui.IsIconic.return_value = True
+    mock_process = MagicMock()
+    mock_process.is_running.return_value = True
+    mock_process.status.return_value = "running"
+    mock_psutil.Process.return_value = mock_process
+    mock_psutil.NoSuchProcess = type("NoSuchProcess", (Exception,), {})
+    mock_psutil.STATUS_ZOMBIE = "zombie"
+
+    result = manager.check_health()
+
+    assert result.status == HealthStatus.WINDOW_MINIMIZED
+    assert result.is_connected is True
+    assert manager.connected_window is connected
+    assert "最小化" in result.message
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_invalid_handle_keeps_connection(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    connected = _fake_connected_window()
+    manager._connected_window = connected
+    mock_win32gui.IsWindow.return_value = False
+
+    result = manager.check_health()
+
+    assert result.status == HealthStatus.HANDLE_INVALID
+    assert result.is_connected is True
+    assert manager.connected_window is connected
+    assert manager.last_error is not None
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_process_dead(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    manager._connected_window = _fake_connected_window()
+    mock_win32gui.IsWindow.return_value = True
+    mock_psutil.NoSuchProcess = type("NoSuchProcess", (Exception,), {})
+    mock_psutil.Process.side_effect = mock_psutil.NoSuchProcess(100)
+    mock_psutil.STATUS_ZOMBIE = "zombie"
+
+    result = manager.check_health()
+
+    assert result.status == HealthStatus.PROCESS_DEAD
+    assert manager.is_connected() is True
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_win32_exception_returns_error(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    manager._connected_window = _fake_connected_window()
+    mock_win32gui.IsWindow.side_effect = RuntimeError("win32 failure")
+
+    result = manager.check_health()
+
+    assert result.status == HealthStatus.ERROR
+    assert "健康检测异常" in result.message
+    assert manager.is_connected() is True
+
+
+@patch("nzfz_executor.core.window_manager.win32gui")
+@patch("nzfz_executor.core.window_manager.psutil")
+def test_check_health_consecutive_failures_do_not_disconnect(
+    mock_psutil: MagicMock,
+    mock_win32gui: MagicMock,
+) -> None:
+    manager = WindowManager()
+    connected = _fake_connected_window()
+    manager._connected_window = connected
+    mock_win32gui.IsWindow.return_value = False
+
+    first = manager.check_health()
+    second = manager.check_health()
+
+    assert first.status == HealthStatus.HANDLE_INVALID
+    assert second.status == HealthStatus.HANDLE_INVALID
+    assert manager.connected_window is connected
+    assert manager.is_connected() is True

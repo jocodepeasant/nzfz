@@ -91,6 +91,31 @@ class ConnectWorker(QThread):
             self.finished.emit(ConnectResult.fail(str(e)))
 
 
+class HealthCheckWorker(QThread):
+    """健康检测工作线程，在后台执行 check_health，避免阻塞 UI 主线程。"""
+
+    finished = Signal(HealthCheckResult)
+    """健康检测完成信号"""
+
+    def __init__(self, manager: WindowManager) -> None:
+        super().__init__()
+        self._manager = manager
+
+    def run(self) -> None:
+        try:
+            result = self._manager.check_health()
+            self.finished.emit(result)
+        except Exception as exc:
+            logger.exception("后台健康检测异常")
+            self.finished.emit(
+                HealthCheckResult(
+                    status=HealthStatus.ERROR,
+                    message=f"健康检测异常：{exc}",
+                    window=self._manager.connected_window,
+                )
+            )
+
+
 class GameConnectTab(QWidget):
     """游戏连接页签，提供窗口搜索、连接管理及健康监测的完整 UI。
 
@@ -114,8 +139,8 @@ class GameConnectTab(QWidget):
         """最近一次搜索结果的缓存列表"""
 
         self._health_timer: QTimer = QTimer(self)
-        """健康检测定时器，连接成功后每秒触发一次"""
-        self._health_timer.setInterval(1000)
+        """健康检测定时器，连接成功后每 2 秒触发一次"""
+        self._health_timer.setInterval(2000)
         self._health_timer.timeout.connect(self._on_health_check)
 
         self._timeout_timer: QTimer = QTimer(self)
@@ -126,6 +151,12 @@ class GameConnectTab(QWidget):
 
         self._worker: ConnectWorker | None = None
         """当前正在运行的连接工作线程，未运行时为 None"""
+
+        self._health_worker: HealthCheckWorker | None = None
+        """当前正在运行的健康检测工作线程"""
+
+        self._health_check_running: bool = False
+        """上一轮健康检测是否仍在执行"""
 
         self._status_label: QLabel
         """页签顶部状态提示栏，用于显示警告或操作反馈"""
@@ -476,7 +507,7 @@ class GameConnectTab(QWidget):
             self._window_info.setVisible(True)
 
             self._health_timer.start()
-            logger.info("连接成功，健康检测定时器已启动, interval=1s")
+            logger.info("连接成功，健康检测定时器已启动, interval=2s")
         else:
             self._set_status(ConnectState.DISCONNECTED)
             err_msg = (
@@ -504,6 +535,12 @@ class GameConnectTab(QWidget):
         self._health_timer.stop()
         logger.debug("健康检测定时器已停止")
 
+        if self._health_worker and self._health_worker.isRunning():
+            self._health_worker.wait()
+            logger.debug("健康检测工作线程已等待结束")
+        self._health_worker = None
+        self._health_check_running = False
+
         self._window_manager.disconnect_window()
 
         self._current_window = None
@@ -515,34 +552,70 @@ class GameConnectTab(QWidget):
         logger.info("断开连接完成")
 
     def _on_health_check(self) -> None:
-        """健康检测回调，每秒触发一次。
+        """健康检测定时器回调：异步执行检测，上一轮未完成则跳过。"""
+        if self._health_check_running:
+            logger.debug("上一轮健康检测未完成，跳过本轮")
+            return
 
-        检测当前窗口连接的健康状态：
-        - HEALTHY 且非 ABNORMAL → 保持 CONNECTED
-        - 从 ABNORMAL 恢复 → 切回 CONNECTED
-        - 其他异常状态 → 切为 ABNORMAL
-        """
-        health_result: HealthCheckResult = self._window_manager.check_health()
-        logger.debug("健康检测, status=%s", health_result.status.value)
+        self._health_check_running = True
+        self._health_worker = HealthCheckWorker(self._window_manager)
+        self._health_worker.finished.connect(self._on_health_check_finished)
+        self._health_worker.start()
 
-        if health_result.status == HealthStatus.HEALTHY:
+    def _on_health_check_finished(self, health_result: HealthCheckResult) -> None:
+        """健康检测完成回调，由后台工作线程触发。"""
+        self._health_check_running = False
+        self._health_worker = None
+
+        logger.debug(
+            "健康检测完成, status=%s, ready=%s",
+            health_result.status.value,
+            health_result.is_ready,
+        )
+
+        if health_result.status == HealthStatus.NOT_CONNECTED:
+            if not self._window_manager.is_connected():
+                logger.warning("健康检测发现未连接，停止定时器")
+                self._health_timer.stop()
+                self._current_window = None
+                self._set_status(ConnectState.DISCONNECTED)
+                self._window_info.clear()
+                self._window_info.setVisible(False)
+            return
+
+        if health_result.window is not None:
+            connected = health_result.window
+            self._window_info.setText(
+                f"窗口标题：{connected.title}  "
+                f"PID：{connected.pid}  "
+                f"客户区：{connected.client_size_text}"
+            )
+            self._window_info.setVisible(True)
+
+        if health_result.is_ready:
             if self._state == ConnectState.ABNORMAL:
                 logger.info("连接从异常恢复, 切回已连接状态")
-                self._set_status(ConnectState.CONNECTED)
-        elif health_result.status == HealthStatus.NOT_CONNECTED:
-            logger.warning("健康检测发现未连接，停止定时器")
-            self._health_timer.stop()
-            self._current_window = None
-            self._set_status(ConnectState.DISCONNECTED)
-            self._window_info.clear()
-            self._window_info.setVisible(False)
+            self._set_status(ConnectState.CONNECTED)
+            self._status_text.setText("已连接，执行就绪")
+        elif health_result.is_healthy:
+            if self._state == ConnectState.ABNORMAL:
+                logger.info("连接从异常恢复, 切回已连接状态")
+            self._set_status(ConnectState.CONNECTED)
+            self._status_text.setText(health_result.message)
+        elif health_result.status == HealthStatus.ERROR:
+            self._status_text.setText(f"检测异常：{health_result.message}")
+            self._set_status(ConnectState.ABNORMAL)
+            logger.warning(
+                "健康检测异常, message=%s",
+                health_result.message,
+            )
         else:
             self._status_text.setText(f"连接异常：{health_result.message}")
             self._set_status(ConnectState.ABNORMAL)
             logger.warning(
                 "连接异常, status=%s, message=%s",
                 health_result.status.value,
-                health_result.message
+                health_result.message,
             )
 
     # ------------------------------------------------------------------
