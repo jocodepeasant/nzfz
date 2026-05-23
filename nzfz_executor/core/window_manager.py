@@ -78,8 +78,8 @@ class WindowManager:
         """当前连接窗口，None 表示未连接"""
         self._last_window_info: Optional[WindowInfo] = None
         """最近一次连接使用的搜索结果"""
-        self._last_error: str = ""
-        """最近一次错误信息"""
+        self._last_error: str | None = None
+        """最近一次错误信息，None 表示无错误"""
 
     def search_windows(self, keyword: str) -> list[WindowInfo]:
         """
@@ -92,7 +92,7 @@ class WindowManager:
         """
         keyword = (keyword or "").strip()
         if not keyword:
-            self._last_error = ""
+            self._last_error = None
             return []
 
         error = self._ensure_supported()
@@ -118,7 +118,7 @@ class WindowManager:
             return results
 
         results.sort(key=lambda item: item.match_score, reverse=True)
-        self._last_error = ""
+        self._last_error = None
 
         logger.info("搜索窗口完成，结果数量：%d", len(results))
         return results
@@ -145,6 +145,12 @@ class WindowManager:
 
         logger.info("开始连接窗口...")
 
+        if self._connected_window is not None:
+            msg = "连接失败：当前已连接窗口，请先断开后再连接其他窗口"
+            self._last_error = msg
+            logger.warning(msg)
+            return ConnectResult.fail(msg)
+
         ok, error = self._validate_window_for_connect(window, options)
         if not ok:
             self._last_error = error
@@ -170,7 +176,7 @@ class WindowManager:
 
         self._connected_window = candidate
         self._last_window_info = window
-        self._last_error = ""
+        self._last_error = None
         logger.info(
             "窗口连接成功: title=%s, pid=%s, hwnd=%s, client=%s, activated=%s",
             candidate.title,
@@ -200,10 +206,29 @@ class WindowManager:
                 self._connected_window.hwnd,
             )
         else:
-            logger.info("断开窗口连接：当前未连接")
+            logger.debug("disconnect_window called, but no window is connected")
 
         self._connected_window = None
-        self._last_error = ""
+        self._last_error = None
+
+    def is_connected(self) -> bool:
+        """判断当前是否存在已连接窗口（不执行健康检测）。"""
+        return self._connected_window is not None
+
+    @property
+    def connected_window(self) -> ConnectedWindow | None:
+        """当前已连接窗口上下文，未连接时返回 None。"""
+        return self._connected_window
+
+    @property
+    def last_error(self) -> str | None:
+        """最近一次 Core 操作产生的错误信息，None 表示无错误。"""
+        return self._last_error
+
+    @property
+    def last_window_info(self) -> WindowInfo | None:
+        """最近一次连接使用的 WindowInfo 搜索快照（不代表当前仍连接）。"""
+        return self._last_window_info
 
     def check_health(self) -> HealthCheckResult:
         """
@@ -228,26 +253,17 @@ class WindowManager:
             window=self._connected_window,
         )
 
-    def get_connected_window(self) -> Optional[ConnectedWindow]:
-        """
-        获取当前已连接窗口。
+    def get_connected_window(self) -> ConnectedWindow | None:
+        """获取当前已连接窗口。"""
+        return self.connected_window
 
-        Returns:
-            未连接时返回 None。
-        """
-        return self._connected_window
+    def get_last_error(self) -> str | None:
+        """获取最近一次错误信息。"""
+        return self.last_error
 
-    def get_last_error(self) -> str:
-        """
-        获取最近一次错误信息。
-        """
-        return self._last_error
-
-    def get_last_window_info(self) -> Optional[WindowInfo]:
-        """
-        获取最近一次连接使用的搜索结果。
-        """
-        return self._last_window_info
+    def get_last_window_info(self) -> WindowInfo | None:
+        """获取最近一次连接使用的搜索结果。"""
+        return self.last_window_info
 
     def is_supported(self) -> bool:
         """
