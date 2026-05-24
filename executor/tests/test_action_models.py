@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from nzfz_executor.core.actions.models import (
     ActionResult,
+    ActionValidationResult,
     ClickAction,
     MouseButton,
     ScreenPoint,
@@ -23,3 +24,8 @@ class TestActionModels:
     def test_action_result_success(self) -> None:
         result = ActionResult(success=True, message="ok")
         assert result.success is True
+
+    def test_action_validation_result(self) -> None:
+        result = ActionValidationResult(valid=False, message="invalid")
+        assert result.valid is False
+        assert result.message == "invalid"

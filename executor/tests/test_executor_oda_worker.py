@@ -65,7 +65,7 @@ def _make_runtime_context(
         screenshot_manager=manager,
         recognizer=recognizer or CenterPointRecognizer(),
         coordinate_mapper=CoordinateMapper(),
-        mouse_controller=mouse_controller or MouseController(dry_run=True),
+        mouse_controller=mouse_controller or MouseController.create_default(dry_run=True),
         max_iterations=max_iterations,
         loop_interval_ms=loop_interval_ms,
     )
@@ -189,19 +189,31 @@ class TestExecutorOdaWorker:
         assert failed == [(7, "map boom")]
 
     def test_non_dry_run_action_emits_failed(self, qapp) -> None:
+        from unittest.mock import MagicMock
+
+        from nzfz_executor.core.actions.models import ActionResult
+
+        mock_backend = MagicMock()
+        mock_backend.click.return_value = ActionResult(
+            success=False,
+            message="真实点击失败：SetCursorPos 调用失败",
+        )
+
         stop_token = StopToken()
         failed: list[tuple[int, str]] = []
 
         worker = ExecutorWorker(
             8,
-            _make_runtime_context(mouse_controller=MouseController(dry_run=False)),
+            _make_runtime_context(
+                mouse_controller=MouseController(mock_backend),
+            ),
             stop_token,
         )
         worker.failed.connect(lambda eid, msg: failed.append((eid, msg)))
         worker.run()
 
         assert failed[0][0] == 8
-        assert "真实点击尚未实现" in failed[0][1]
+        assert "真实点击失败" in failed[0][1]
 
     def test_stop_before_start_emits_stopped(self, qapp) -> None:
         stop_token = StopToken()

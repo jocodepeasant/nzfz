@@ -607,7 +607,7 @@ class GameConnectTab(QWidget):
             screenshot_manager=self._screenshot_manager,
             recognizer=CenterPointRecognizer(),
             coordinate_mapper=CoordinateMapper(),
-            mouse_controller=MouseController(
+            mouse_controller=MouseController.create_default(
                 dry_run=DEFAULT_ACTION_DRY_RUN,
             ),
             max_iterations=DEFAULT_EXECUTOR_MAX_ITERATIONS,

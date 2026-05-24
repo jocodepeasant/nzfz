@@ -57,7 +57,7 @@ def _make_runtime_context(*, block: threading.Event | None = None) -> ExecutorRu
         screenshot_manager=manager,
         recognizer=CenterPointRecognizer(),
         coordinate_mapper=CoordinateMapper(),
-        mouse_controller=MouseController(dry_run=True),
+        mouse_controller=MouseController.create_default(dry_run=True),
         max_iterations=1,
         loop_interval_ms=0,
     )

@@ -29,7 +29,7 @@ class TestExecutorRuntimeContext:
             screenshot_manager=MagicMock(),
             recognizer=CenterPointRecognizer(),
             coordinate_mapper=CoordinateMapper(),
-            mouse_controller=MouseController(dry_run=True),
+            mouse_controller=MouseController.create_default(dry_run=True),
             max_iterations=1,
             loop_interval_ms=500,
         )
@@ -37,4 +37,6 @@ class TestExecutorRuntimeContext:
         assert ctx.connected_context.hwnd == 42
         assert ctx.max_iterations == 1
         assert ctx.loop_interval_ms == 500
-        assert ctx.mouse_controller.dry_run is True
+        from nzfz_executor.core.actions.backends import DryRunMouseBackend
+
+        assert isinstance(ctx.mouse_controller._backend, DryRunMouseBackend)

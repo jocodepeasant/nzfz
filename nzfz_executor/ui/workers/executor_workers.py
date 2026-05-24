@@ -155,7 +155,10 @@ class ExecutorWorker(QObject):
         )
 
         action = ClickAction(point=screen_point)
-        result = ctx.mouse_controller.click(action)
+        result = ctx.mouse_controller.click(
+            action,
+            context=ctx.connected_context,
+        )
 
         if not result.success:
             raise RuntimeError(result.message or "动作执行失败")

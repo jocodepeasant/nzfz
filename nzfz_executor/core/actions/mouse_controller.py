@@ -1,32 +1,35 @@
-"""鼠标控制器（P2-07 dry-run）。"""
+"""鼠标控制器（P2-08 backend 组合）。"""
 
 from __future__ import annotations
 
+from nzfz_executor.core.actions.backends.base import MouseInputBackend
+from nzfz_executor.core.actions.backends.dry_run_backend import DryRunMouseBackend
+from nzfz_executor.core.actions.backends.send_input_backend import SendInputMouseBackend
 from nzfz_executor.core.actions.models import ActionResult, ClickAction
+from nzfz_executor.core.models import ConnectedWindow
 
 
 class MouseController:
-    """鼠标点击控制器；P2-07 默认 dry-run，不真实点击。"""
+    """鼠标点击控制器，通过输入后端执行动作。"""
 
-    def __init__(self, dry_run: bool = True) -> None:
-        self._dry_run = dry_run
+    def __init__(self, backend: MouseInputBackend) -> None:
+        self._backend = backend
 
-    @property
-    def dry_run(self) -> bool:
-        return self._dry_run
+    @classmethod
+    def create_default(cls, dry_run: bool = True) -> MouseController:
+        if dry_run:
+            backend = DryRunMouseBackend()
+        else:
+            backend = SendInputMouseBackend()
 
-    def click(self, action: ClickAction) -> ActionResult:
-        if self._dry_run:
-            point = action.point
-            return ActionResult(
-                success=True,
-                message=(
-                    "dry-run：跳过真实点击 "
-                    f"screen=({point.x},{point.y})"
-                ),
-            )
+        return cls(backend=backend)
 
-        return ActionResult(
-            success=False,
-            message="真实点击尚未实现",
+    def click(
+        self,
+        action: ClickAction,
+        context: ConnectedWindow | None = None,
+    ) -> ActionResult:
+        return self._backend.click(
+            action=action,
+            context=context,
         )

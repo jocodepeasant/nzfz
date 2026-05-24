@@ -37,3 +37,11 @@ class ActionResult:
 
     success: bool
     message: str = ""
+
+
+@dataclass(frozen=True)
+class ActionValidationResult:
+    """动作安全校验结果。"""
+
+    valid: bool
+    message: str = ""

@@ -420,6 +420,7 @@ class TestRuntimeContextInjection:
         assert isinstance(runtime_context, ExecutorRuntimeContext)
 
     def test_runtime_context_contains_components(self, tab: GameConnectTab) -> None:
+        from nzfz_executor.core.actions.backends import DryRunMouseBackend
         from nzfz_executor.core.actions.mouse_controller import MouseController
         from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
         from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
@@ -433,7 +434,10 @@ class TestRuntimeContextInjection:
         assert isinstance(runtime_context.recognizer, CenterPointRecognizer)
         assert isinstance(runtime_context.coordinate_mapper, CoordinateMapper)
         assert isinstance(runtime_context.mouse_controller, MouseController)
-        assert runtime_context.mouse_controller.dry_run is True
+        assert isinstance(
+            runtime_context.mouse_controller._backend,
+            DryRunMouseBackend,
+        )
 
 
 class TestConnectionStateEffects:
