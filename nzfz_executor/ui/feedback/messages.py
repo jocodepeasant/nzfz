@@ -1,0 +1,296 @@
+"""用户反馈提示码、级别与标准文案。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+
+class FeedbackLevel(Enum):
+    INFO = "info"
+    SUCCESS = "success"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class FeedbackCode(Enum):
+    SEARCH_INPUT_REQUIRED = "search.input_required"
+    SEARCHING = "search.searching"
+    SEARCH_NO_RESULT = "search.no_result"
+    SEARCH_FOUND = "search.found"
+    SEARCH_FAILED = "search.failed"
+    SEARCH_TIMEOUT = "search.timeout"
+
+    CONNECTING = "connect.connecting"
+    CONNECT_SUCCESS_READY = "connect.success_ready"
+    CONNECT_FAILED = "connect.failed"
+    CONNECT_TIMEOUT = "connect.timeout"
+    CONNECT_EXCEPTION = "connect.exception"
+    DISCONNECTED = "connect.disconnected"
+    DISCONNECT_SUCCESS = "connect.disconnect_success"
+
+    HEALTH_READY = "health.ready"
+    HEALTH_NOT_READY_FOREGROUND = "health.not_ready_foreground"
+    HEALTH_UNHEALTHY = "health.unhealthy"
+    HEALTH_TIMEOUT = "health.timeout"
+    HEALTH_EXCEPTION = "health.exception"
+    HEALTH_DISCONNECTED = "health.disconnected"
+
+    WINDOW_MINIMIZED = "window.minimized"
+    WINDOW_NOT_FOREGROUND = "window.not_foreground"
+    WINDOW_INVALID = "window.invalid"
+    WINDOW_PROCESS_EXITED = "window.process_exited"
+    WINDOW_INVISIBLE = "window.invisible"
+
+    CONFIRM_SWITCH_CONNECTION_TITLE = "confirm.switch_connection.title"
+    CONFIRM_SWITCH_CONNECTION_MESSAGE = "confirm.switch_connection.message"
+
+    TASK_EXCEPTION = "task.exception"
+    TASK_RESULT_EXPIRED = "task.result_expired"
+
+    SCREENSHOT_CAPTURING = "screenshot.capturing"
+    SCREENSHOT_SUCCESS = "screenshot.success"
+    SCREENSHOT_FAILED = "screenshot.failed"
+    SCREENSHOT_TIMEOUT = "screenshot.timeout"
+    SCREENSHOT_UNAVAILABLE = "screenshot.unavailable"
+    SCREENSHOT_BACKEND_LIMITED = "screenshot.backend_limited"
+
+    EXECUTOR_NOT_READY = "executor.not_ready"
+    EXECUTOR_READY = "executor.ready"
+    EXECUTOR_READY_BACKGROUND = "executor.ready_background"
+    EXECUTOR_ACTIVATE_FAILED = "executor.activate_failed"
+    EXECUTOR_RUNNING = "executor.running"
+    EXECUTOR_STOPPING = "executor.stopping"
+    EXECUTOR_STOPPED = "executor.stopped"
+    EXECUTOR_COMPLETED = "executor.completed"
+    EXECUTOR_FAILED = "executor.failed"
+    EXECUTOR_START_BLOCKED = "executor.start_blocked"
+    EXECUTOR_STOP_REQUIRED = "executor.stop_required"
+    EXECUTOR_STOP_TIMEOUT = "executor.stop_timeout"
+    EXECUTOR_ALREADY_RUNNING = "executor.already_running"
+    EXECUTOR_NO_ACTIVE_TASK = "executor.no_active_task"
+
+
+@dataclass(frozen=True)
+class FeedbackMessage:
+    level: FeedbackLevel
+    text: str
+
+
+FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
+    FeedbackCode.SEARCH_INPUT_REQUIRED: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "请输入窗口标题、进程名或 PID",
+    ),
+    FeedbackCode.SEARCHING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "正在搜索窗口...",
+    ),
+    FeedbackCode.SEARCH_NO_RESULT: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "未找到匹配窗口",
+    ),
+    FeedbackCode.SEARCH_FOUND: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "找到 {count} 个窗口",
+    ),
+    FeedbackCode.SEARCH_FAILED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "搜索窗口失败，请稍后重试",
+    ),
+    FeedbackCode.SEARCH_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "搜索窗口超时，请稍后重试",
+    ),
+    FeedbackCode.CONNECTING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "正在连接窗口...",
+    ),
+    FeedbackCode.CONNECT_SUCCESS_READY: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "已连接，执行就绪",
+    ),
+    FeedbackCode.CONNECT_FAILED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "连接窗口失败，请检查窗口状态后重试",
+    ),
+    FeedbackCode.CONNECT_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "连接窗口超时，请稍后重试",
+    ),
+    FeedbackCode.CONNECT_EXCEPTION: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "连接窗口异常，请稍后重试",
+    ),
+    FeedbackCode.DISCONNECTED: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "未连接游戏窗口",
+    ),
+    FeedbackCode.DISCONNECT_SUCCESS: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "已断开连接",
+    ),
+    FeedbackCode.HEALTH_READY: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "执行就绪",
+    ),
+    FeedbackCode.HEALTH_NOT_READY_FOREGROUND: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "窗口未在前台；dry-run 可执行，真实操作需切回游戏",
+    ),
+    FeedbackCode.HEALTH_UNHEALTHY: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "窗口状态异常，请检查游戏窗口",
+    ),
+    FeedbackCode.HEALTH_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "窗口状态检测超时",
+    ),
+    FeedbackCode.HEALTH_EXCEPTION: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "窗口状态检测失败",
+    ),
+    FeedbackCode.HEALTH_DISCONNECTED: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "执行未就绪",
+    ),
+    FeedbackCode.WINDOW_MINIMIZED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "窗口已最小化，请恢复窗口后重试",
+    ),
+    FeedbackCode.WINDOW_NOT_FOREGROUND: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "窗口未在前台，请切回游戏窗口",
+    ),
+    FeedbackCode.WINDOW_INVALID: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "窗口已失效，请重新搜索",
+    ),
+    FeedbackCode.WINDOW_PROCESS_EXITED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "游戏进程已退出，请重新启动游戏",
+    ),
+    FeedbackCode.WINDOW_INVISIBLE: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "游戏窗口不可见，请检查窗口状态",
+    ),
+    FeedbackCode.CONFIRM_SWITCH_CONNECTION_TITLE: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "切换连接窗口",
+    ),
+    FeedbackCode.CONFIRM_SWITCH_CONNECTION_MESSAGE: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前已连接其他窗口。继续操作将断开当前连接，并连接所选窗口。是否继续？",
+    ),
+    FeedbackCode.TASK_EXCEPTION: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "任务执行异常，请稍后重试",
+    ),
+    FeedbackCode.TASK_RESULT_EXPIRED: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "任务结果已过期，已忽略",
+    ),
+    FeedbackCode.SCREENSHOT_CAPTURING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "正在刷新截图...",
+    ),
+    FeedbackCode.SCREENSHOT_SUCCESS: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "截图刷新成功",
+    ),
+    FeedbackCode.SCREENSHOT_FAILED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "截图失败，请稍后重试",
+    ),
+    FeedbackCode.SCREENSHOT_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "截图超时，请稍后重试",
+    ),
+    FeedbackCode.SCREENSHOT_UNAVAILABLE: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前未连接游戏窗口，无法截图",
+    ),
+    FeedbackCode.SCREENSHOT_BACKEND_LIMITED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前截图后端不支持被遮挡窗口截图，若窗口被遮挡，截图内容可能不准确",
+    ),
+    FeedbackCode.EXECUTOR_NOT_READY: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "请先连接游戏窗口",
+    ),
+    FeedbackCode.EXECUTOR_READY: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "执行就绪，可开始任务",
+    ),
+    FeedbackCode.EXECUTOR_READY_BACKGROUND: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "可开始 dry-run 调试（窗口未在前台）",
+    ),
+    FeedbackCode.EXECUTOR_ACTIVATE_FAILED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "无法激活游戏窗口，请手动切回游戏后重试",
+    ),
+    FeedbackCode.EXECUTOR_RUNNING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "任务执行中",
+    ),
+    FeedbackCode.EXECUTOR_STOPPING: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "正在停止任务",
+    ),
+    FeedbackCode.EXECUTOR_STOPPED: FeedbackMessage(
+        FeedbackLevel.INFO,
+        "任务已停止",
+    ),
+    FeedbackCode.EXECUTOR_COMPLETED: FeedbackMessage(
+        FeedbackLevel.SUCCESS,
+        "任务执行完成",
+    ),
+    FeedbackCode.EXECUTOR_FAILED: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "任务执行失败",
+    ),
+    FeedbackCode.EXECUTOR_START_BLOCKED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前无法开始执行",
+    ),
+    FeedbackCode.EXECUTOR_STOP_REQUIRED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "请先停止当前任务",
+    ),
+    FeedbackCode.EXECUTOR_STOP_TIMEOUT: FeedbackMessage(
+        FeedbackLevel.ERROR,
+        "任务停止超时，请检查后台任务状态",
+    ),
+    FeedbackCode.EXECUTOR_ALREADY_RUNNING: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前已有任务正在运行",
+    ),
+    FeedbackCode.EXECUTOR_NO_ACTIVE_TASK: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "当前没有正在运行的任务",
+    ),
+}
+
+
+def get_feedback_message(code: FeedbackCode) -> FeedbackMessage:
+    return FEEDBACK_MESSAGES.get(
+        code,
+        FeedbackMessage(
+            FeedbackLevel.ERROR,
+            "发生未知错误，请稍后重试",
+        ),
+    )
+
+
+def get_feedback_text(code: FeedbackCode, **kwargs: object) -> str:
+    message = get_feedback_message(code)
+
+    try:
+        return message.text.format(**kwargs)
+    except Exception:
+        return message.text
+
+
+def get_feedback_level(code: FeedbackCode) -> FeedbackLevel:
+    return get_feedback_message(code).level

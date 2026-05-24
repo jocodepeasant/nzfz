@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 
 @dataclass(frozen=True)
@@ -159,6 +163,8 @@ class HealthStatus(Enum):
     """窗口已最小化"""
     WINDOW_SIZE_INVALID = "窗口尺寸异常"
     """窗口尺寸异常"""
+    ERROR = "error"
+    """健康检测或平台错误"""
     UNKNOWN = "未知异常"
     """未知异常"""
 
@@ -269,6 +275,15 @@ class HealthCheckResult:
     """状态描述"""
     window: Optional[ConnectedWindow] = None
     """刷新后的窗口对象"""
+    is_foreground: bool = False
+    """目标窗口是否为当前前台窗口"""
+    checked_at: datetime | None = None
+    """检测时间戳"""
+
+    @property
+    def connected_window(self) -> ConnectedWindow | None:
+        """当前连接窗口上下文（与 window 字段同义）。"""
+        return self.window
 
     @property
     def is_healthy(self) -> bool:
@@ -277,9 +292,62 @@ class HealthCheckResult:
 
     @property
     def is_connected(self) -> bool:
-        """是否存在连接上下文。
+        """是否存在连接上下文（不代表健康）。"""
+        return self.window is not None
 
-        注意：is_connected=True 不代表健康，仅代表不是 NOT_CONNECTED。
-        """
-        return self.status != HealthStatus.NOT_CONNECTED
+    @property
+    def is_ready(self) -> bool:
+        """是否执行就绪（健康且窗口在前台）。"""
+        return self.is_healthy and self.is_foreground
+
+
+class CaptureRegion(str, Enum):
+    """截图区域枚举。"""
+
+    CLIENT = "client"
+    """客户区"""
+    WINDOW = "window"
+    """整个窗口区域"""
+
+
+class CaptureBackendType(str, Enum):
+    """截图后端类型枚举。"""
+
+    AUTO = "auto"
+    SCREEN = "screen"
+    PRINT_WINDOW = "print_window"
+    WINDOWS_GRAPHICS_CAPTURE = "windows_graphics_capture"
+
+
+@dataclass
+class CaptureOptions:
+    """截图请求选项。"""
+
+    region: CaptureRegion = CaptureRegion.CLIENT
+    backend: CaptureBackendType = CaptureBackendType.AUTO
+    require_foreground: bool = False
+    allow_occluded: bool = True
+
+
+@dataclass
+class ScreenshotResult:
+    """截图结果。"""
+
+    success: bool
+    image: Image | None = None
+    width: int = 0
+    height: int = 0
+    captured_at: datetime | None = None
+
+    hwnd: int | None = None
+    window_title: str = ""
+
+    region: CaptureRegion = CaptureRegion.CLIENT
+    backend: CaptureBackendType = CaptureBackendType.SCREEN
+
+    window_rect: WindowRect | None = None
+    client_rect: WindowRect | None = None
+
+    supports_occluded: bool = False
+    message: str = ""
 

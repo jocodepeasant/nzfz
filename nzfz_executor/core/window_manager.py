@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import platform
 import time
+from datetime import datetime
 from typing import Optional
 
 from nzfz_executor.core.models import (
@@ -78,8 +79,8 @@ class WindowManager:
         """当前连接窗口，None 表示未连接"""
         self._last_window_info: Optional[WindowInfo] = None
         """最近一次连接使用的搜索结果"""
-        self._last_error: str = ""
-        """最近一次错误信息"""
+        self._last_error: str | None = None
+        """最近一次错误信息，None 表示无错误"""
 
     def search_windows(self, keyword: str) -> list[WindowInfo]:
         """
@@ -92,7 +93,7 @@ class WindowManager:
         """
         keyword = (keyword or "").strip()
         if not keyword:
-            self._last_error = ""
+            self._last_error = None
             return []
 
         error = self._ensure_supported()
@@ -118,7 +119,7 @@ class WindowManager:
             return results
 
         results.sort(key=lambda item: item.match_score, reverse=True)
-        self._last_error = ""
+        self._last_error = None
 
         logger.info("搜索窗口完成，结果数量：%d", len(results))
         return results
@@ -145,6 +146,12 @@ class WindowManager:
 
         logger.info("开始连接窗口...")
 
+        if self._connected_window is not None:
+            msg = "连接失败：当前已连接窗口，请先断开后再连接其他窗口"
+            self._last_error = msg
+            logger.warning(msg)
+            return ConnectResult.fail(msg)
+
         ok, error = self._validate_window_for_connect(window, options)
         if not ok:
             self._last_error = error
@@ -170,7 +177,7 @@ class WindowManager:
 
         self._connected_window = candidate
         self._last_window_info = window
-        self._last_error = ""
+        self._last_error = None
         logger.info(
             "窗口连接成功: title=%s, pid=%s, hwnd=%s, client=%s, activated=%s",
             candidate.title,
@@ -200,54 +207,200 @@ class WindowManager:
                 self._connected_window.hwnd,
             )
         else:
-            logger.info("断开窗口连接：当前未连接")
+            logger.debug("disconnect_window called, but no window is connected")
 
         self._connected_window = None
-        self._last_error = ""
+        self._last_error = None
+
+    def is_connected(self) -> bool:
+        """判断当前是否存在已连接窗口（不执行健康检测）。"""
+        return self._connected_window is not None
+
+    @property
+    def connected_window(self) -> ConnectedWindow | None:
+        """当前已连接窗口上下文，未连接时返回 None。"""
+        return self._connected_window
+
+    @property
+    def last_error(self) -> str | None:
+        """最近一次 Core 操作产生的错误信息，None 表示无错误。"""
+        return self._last_error
+
+    @property
+    def last_window_info(self) -> WindowInfo | None:
+        """最近一次连接使用的 WindowInfo 搜索快照（不代表当前仍连接）。"""
+        return self._last_window_info
 
     def check_health(self) -> HealthCheckResult:
         """
         检测当前连接窗口是否正常。
 
-        P0-02 阶段：
-        - 未连接返回 NOT_CONNECTED
-        - 已连接暂时返回 HEALTHY
-
-        真实健康检测逻辑在 P1-01 阶段实现。
+        只报告状态，不自动断开、不激活、不恢复最小化。
+        健康时刷新 _connected_window 的动态字段；失败时保留连接对象。
         """
-        if self._connected_window is None:
+        checked_at = datetime.now()
+        connected = self._connected_window
+
+        if connected is None:
+            self._last_error = None
             return HealthCheckResult(
                 status=HealthStatus.NOT_CONNECTED,
-                message="未连接",
+                message="未连接游戏窗口",
                 window=None,
+                is_foreground=False,
+                checked_at=checked_at,
             )
 
-        return HealthCheckResult(
-            status=HealthStatus.HEALTHY,
-            message="连接正常",
-            window=self._connected_window,
+        logger.debug(
+            "开始健康检测: hwnd=%s, pid=%s",
+            connected.hwnd,
+            connected.pid,
         )
 
-    def get_connected_window(self) -> Optional[ConnectedWindow]:
-        """
-        获取当前已连接窗口。
+        support_error = self._ensure_supported()
+        if support_error:
+            self._last_error = support_error
+            return HealthCheckResult(
+                status=HealthStatus.ERROR,
+                message=support_error,
+                window=connected,
+                is_foreground=False,
+                checked_at=checked_at,
+            )
 
-        Returns:
-            未连接时返回 None。
-        """
+        try:
+            hwnd = connected.hwnd
+            pid = connected.pid
+
+            if not win32gui.IsWindow(hwnd):
+                message = "目标窗口句柄已失效，请重新搜索窗口"
+                self._last_error = message
+                return HealthCheckResult(
+                    status=HealthStatus.HANDLE_INVALID,
+                    message=message,
+                    window=connected,
+                    is_foreground=False,
+                    checked_at=checked_at,
+                )
+
+            if not self._is_process_alive(pid):
+                message = "目标窗口进程已退出，请重新搜索窗口"
+                self._last_error = message
+                return HealthCheckResult(
+                    status=HealthStatus.PROCESS_DEAD,
+                    message=message,
+                    window=connected,
+                    is_foreground=False,
+                    checked_at=checked_at,
+                )
+
+            if not win32gui.IsWindowVisible(hwnd):
+                message = "目标窗口不可见"
+                self._last_error = message
+                return HealthCheckResult(
+                    status=HealthStatus.WINDOW_HIDDEN,
+                    message=message,
+                    window=connected,
+                    is_foreground=False,
+                    checked_at=checked_at,
+                )
+
+            if win32gui.IsIconic(hwnd):
+                message = "窗口已最小化，请恢复窗口后重试"
+                self._last_error = message
+                return HealthCheckResult(
+                    status=HealthStatus.WINDOW_MINIMIZED,
+                    message=message,
+                    window=connected,
+                    is_foreground=False,
+                    checked_at=checked_at,
+                )
+
+            window_rect = self._get_connect_window_rect(hwnd)
+            if not self._is_valid_window_rect(window_rect):
+                message = "目标窗口矩形异常"
+                self._last_error = message
+                return HealthCheckResult(
+                    status=HealthStatus.WINDOW_SIZE_INVALID,
+                    message=message,
+                    window=connected,
+                    is_foreground=False,
+                    checked_at=checked_at,
+                )
+
+            client_rect = self._get_connect_client_rect(hwnd)
+            if not self._is_valid_client_rect(client_rect):
+                message = "目标窗口客户区矩形异常"
+                self._last_error = message
+                return HealthCheckResult(
+                    status=HealthStatus.WINDOW_SIZE_INVALID,
+                    message=message,
+                    window=connected,
+                    is_foreground=False,
+                    checked_at=checked_at,
+                )
+
+            is_foreground = win32gui.GetForegroundWindow() == hwnd
+            refreshed = self._refresh_connected_window(
+                connected,
+                window_rect,
+                client_rect,
+            )
+            self._connected_window = refreshed
+            self._last_error = None
+
+            message = (
+                "窗口连接正常"
+                if is_foreground
+                else "窗口连接正常，但当前不在前台"
+            )
+            logger.debug(
+                "健康检测成功: hwnd=%s, foreground=%s",
+                hwnd,
+                is_foreground,
+            )
+            return HealthCheckResult(
+                status=HealthStatus.HEALTHY,
+                message=message,
+                window=refreshed,
+                is_foreground=is_foreground,
+                checked_at=checked_at,
+            )
+
+        except Exception as exc:
+            message = f"健康检测异常：{exc}"
+            self._last_error = message
+            logger.warning("健康检测异常: %s", exc)
+            return HealthCheckResult(
+                status=HealthStatus.ERROR,
+                message=message,
+                window=connected,
+                is_foreground=False,
+                checked_at=checked_at,
+            )
+
+    def get_connected_window(self) -> ConnectedWindow | None:
+        """获取当前已连接窗口。"""
+        return self.connected_window
+
+    def get_connected_context(self) -> ConnectedWindow | None:
+        """获取当前已连接窗口上下文（与 get_connected_window 同义）。"""
         return self._connected_window
 
-    def get_last_error(self) -> str:
-        """
-        获取最近一次错误信息。
-        """
-        return self._last_error
+    def activate_connected_window(self) -> tuple[bool, str]:
+        """尝试将当前已连接窗口置前；未连接时返回失败。"""
+        connected = self._connected_window
+        if connected is None:
+            return False, "未连接游戏窗口"
+        return self._activate_window(connected.hwnd)
 
-    def get_last_window_info(self) -> Optional[WindowInfo]:
-        """
-        获取最近一次连接使用的搜索结果。
-        """
-        return self._last_window_info
+    def get_last_error(self) -> str | None:
+        """获取最近一次错误信息。"""
+        return self.last_error
+
+    def get_last_window_info(self) -> WindowInfo | None:
+        """获取最近一次连接使用的搜索结果。"""
+        return self.last_window_info
 
     def is_supported(self) -> bool:
         """
@@ -569,6 +722,87 @@ class WindowManager:
         del hwnd
         return 1.0
 
+    def _is_process_alive(self, pid: int) -> bool:
+        """检查目标进程是否存在且处于可运行状态。"""
+        if pid <= 0:
+            return False
+        try:
+            process = psutil.Process(pid)
+            if not process.is_running():
+                return False
+            if process.status() == psutil.STATUS_ZOMBIE:
+                return False
+            return True
+        except psutil.NoSuchProcess:
+            return False
+        except Exception as exc:
+            logger.debug("检查进程存活失败，pid=%s，错误：%s", pid, exc)
+            return False
+
+    def _get_connect_window_rect(self, hwnd: int) -> WindowRect | None:
+        """获取窗口外框矩形（屏幕坐标）。"""
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            return WindowRect(left, top, right, bottom)
+        except Exception as exc:
+            logger.debug("获取窗口矩形失败，hwnd=%s，错误：%s", hwnd, exc)
+            return None
+
+    def _get_connect_client_rect(self, hwnd: int) -> WindowRect | None:
+        """获取客户区矩形（屏幕坐标）。"""
+        try:
+            c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(hwnd)
+            s_left, s_top = win32gui.ClientToScreen(hwnd, (c_left, c_top))
+            s_right, s_bottom = win32gui.ClientToScreen(
+                hwnd,
+                (c_right, c_bottom),
+            )
+            return WindowRect(
+                left=s_left,
+                top=s_top,
+                right=s_right,
+                bottom=s_bottom,
+            )
+        except Exception as exc:
+            logger.debug("获取客户区矩形失败，hwnd=%s，错误：%s", hwnd, exc)
+            return None
+
+    def _is_valid_window_rect(self, rect: WindowRect | None) -> bool:
+        """校验窗口外框矩形尺寸是否满足连接/健康检测阈值。"""
+        if rect is None:
+            return False
+        return rect.is_valid(
+            self.CONNECT_MIN_WINDOW_WIDTH,
+            self.CONNECT_MIN_WINDOW_HEIGHT,
+        )
+
+    def _is_valid_client_rect(self, rect: WindowRect | None) -> bool:
+        """校验客户区矩形尺寸是否满足连接/健康检测阈值。"""
+        if rect is None:
+            return False
+        return rect.is_valid(self.MIN_CLIENT_WIDTH, self.MIN_CLIENT_HEIGHT)
+
+    def _refresh_connected_window(
+        self,
+        connected: ConnectedWindow,
+        window_rect: WindowRect,
+        client_rect: WindowRect,
+    ) -> ConnectedWindow:
+        """刷新连接上下文的动态字段，保留 hwnd/pid/connected_at。"""
+        hwnd = connected.hwnd
+        title = win32gui.GetWindowText(hwnd).strip() or connected.title
+        process_name = self._get_process_name(connected.pid) or connected.process_name
+        return ConnectedWindow(
+            hwnd=hwnd,
+            title=title,
+            process_name=process_name,
+            pid=connected.pid,
+            window_rect=window_rect,
+            client_rect=client_rect,
+            dpi_scale=self._get_dpi_scale(hwnd),
+            connected_at=connected.connected_at,
+        )
+
     def _build_connected_window(
         self,
         window: WindowInfo,
@@ -606,36 +840,17 @@ class WindowManager:
             except psutil.ZombieProcess:
                 return False, "连接失败：目标进程状态异常", None
 
-            try:
-                left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-            except Exception as exc:
-                logger.debug("获取窗口矩形失败，hwnd=%s，错误：%s", hwnd, exc)
+            window_rect = self._get_connect_window_rect(hwnd)
+            if window_rect is None:
                 return False, "连接失败：获取窗口矩形失败", None
-
-            window_rect = WindowRect(left, top, right, bottom)
-            if window_rect.width < self.CONNECT_MIN_WINDOW_WIDTH:
+            if not self._is_valid_window_rect(window_rect):
                 return False, "连接失败：窗口宽度过小", None
-            if window_rect.height < self.CONNECT_MIN_WINDOW_HEIGHT:
-                return False, "连接失败：窗口高度过小", None
 
-            try:
-                c_left, c_top, c_right, c_bottom = win32gui.GetClientRect(hwnd)
-                s_left, s_top = win32gui.ClientToScreen(hwnd, (c_left, c_top))
-                s_right, s_bottom = win32gui.ClientToScreen(hwnd, (c_right, c_bottom))
-            except Exception as exc:
-                logger.debug("获取客户区矩形失败，hwnd=%s，错误：%s", hwnd, exc)
+            client_rect = self._get_connect_client_rect(hwnd)
+            if client_rect is None:
                 return False, "连接失败：获取客户区矩形失败", None
-
-            client_rect = WindowRect(
-                left=s_left,
-                top=s_top,
-                right=s_right,
-                bottom=s_bottom,
-            )
-            if client_rect.width < self.MIN_CLIENT_WIDTH:
+            if not self._is_valid_client_rect(client_rect):
                 return False, "连接失败：客户区宽度过小", None
-            if client_rect.height < self.MIN_CLIENT_HEIGHT:
-                return False, "连接失败：客户区高度过小", None
 
             connected_window = ConnectedWindow(
                 hwnd=hwnd,
