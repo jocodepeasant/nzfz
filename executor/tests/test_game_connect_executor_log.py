@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from PySide6.QtWidgets import QPlainTextEdit
 
+from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.models import ConnectedWindow, WindowInfo, WindowRect
 from nzfz_executor.ui.config.defaults import DEFAULT_MAX_EXECUTOR_LOG_LINES
 from nzfz_executor.ui.models.executor_log import ExecutorLogLevel
@@ -35,7 +36,11 @@ class FakeExecutorTaskRunner:
         self.start_rejected = self._emitter.start_rejected
         self.next_start_result = True
 
-    def start(self, execution_id: int, context: ConnectedWindow | None) -> bool:
+    def start(
+        self,
+        execution_id: int,
+        runtime_context: ExecutorRuntimeContext | None,
+    ) -> bool:
         if not self.next_start_result:
             self.start_rejected.emit(execution_id, "当前已有任务正在运行")
             return False

@@ -1,14 +1,18 @@
-"""P2-05 ExecutorWorker 单元测试。"""
+"""P2-07 ExecutorWorker 单元测试。"""
 
 from __future__ import annotations
 
-import pytest
+from unittest.mock import MagicMock
 
-from nzfz_executor.core.models import ConnectedWindow, WindowRect
-from nzfz_executor.ui.workers.executor_workers import (
-    EXECUTOR_PLACEHOLDER_TOTAL_STEPS,
-    ExecutorWorker,
-)
+import pytest
+from PIL import Image
+
+from nzfz_executor.core.actions.mouse_controller import MouseController
+from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
+from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
+from nzfz_executor.core.models import ConnectedWindow, ScreenshotResult, WindowRect
+from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
+from nzfz_executor.ui.workers.executor_workers import ExecutorWorker
 from nzfz_executor.ui.workers.stop_token import StopToken
 
 
@@ -33,8 +37,27 @@ def _fake_connected() -> ConnectedWindow:
     )
 
 
+def _make_runtime_context(**kwargs) -> ExecutorRuntimeContext:
+    manager = MagicMock()
+    manager.capture.return_value = ScreenshotResult(
+        success=True,
+        image=Image.new("RGB", (100, 100)),
+        width=100,
+        height=100,
+    )
+    return ExecutorRuntimeContext(
+        connected_context=kwargs.get("connected", _fake_connected()),
+        screenshot_manager=manager,
+        recognizer=CenterPointRecognizer(),
+        coordinate_mapper=CoordinateMapper(),
+        mouse_controller=MouseController(dry_run=True),
+        max_iterations=kwargs.get("max_iterations", 1),
+        loop_interval_ms=kwargs.get("loop_interval_ms", 0),
+    )
+
+
 class TestExecutorWorker:
-    def test_context_none_emits_failed(self, qapp) -> None:
+    def test_runtime_context_none_emits_failed(self, qapp) -> None:
         stop_token = StopToken()
         received: list[tuple[int, str]] = []
 
@@ -42,7 +65,7 @@ class TestExecutorWorker:
         worker.failed.connect(lambda eid, msg: received.append((eid, msg)))
         worker.run()
 
-        assert received == [(1, "当前未连接游戏窗口，无法执行任务")]
+        assert received == [(1, "执行上下文为空，无法执行任务")]
 
     def test_normal_run_emits_completed_and_progress(
         self,
@@ -56,7 +79,7 @@ class TestExecutorWorker:
         progress: list[tuple[int, int, str]] = []
         logs: list[tuple[int, str]] = []
 
-        worker = ExecutorWorker(2, _fake_connected(), stop_token)
+        worker = ExecutorWorker(2, _make_runtime_context(), stop_token)
         worker.completed.connect(completed.append)
         worker.progress.connect(
             lambda eid, percent, msg: progress.append((eid, percent, msg)),
@@ -65,7 +88,6 @@ class TestExecutorWorker:
         worker.run()
 
         assert completed == [2]
-        assert len(progress) == EXECUTOR_PLACEHOLDER_TOTAL_STEPS
         assert progress[-1][1] == 100
         assert logs[0] == (2, "执行任务已启动")
         assert logs[-1] == (2, "执行任务已完成")
@@ -76,32 +98,29 @@ class TestExecutorWorker:
         stop_token = StopToken()
         stopped: list[int] = []
 
-        worker = ExecutorWorker(3, _fake_connected(), stop_token)
+        worker = ExecutorWorker(3, _make_runtime_context(), stop_token)
         worker.stopped.connect(stopped.append)
 
-        def request_stop_on_first_progress(
-            execution_id: int,
-            percent: int,
-            message: str,
-        ) -> None:
-            if percent == 5:
+        def request_stop_on_first_log(execution_id: int, message: str) -> None:
+            if message == "正在截图...":
                 stop_token.request_stop()
 
-        worker.progress.connect(request_stop_on_first_progress)
+        worker.log.connect(request_stop_on_first_log)
         worker.run()
 
         assert stopped == [3]
 
-    def test_exception_emits_failed(self, qapp, monkeypatch) -> None:
-        def boom(_seconds: float) -> None:
-            raise RuntimeError("boom")
-
-        monkeypatch.setattr("nzfz_executor.ui.workers.executor_workers.time.sleep", boom)
+    def test_exception_emits_failed(self, qapp) -> None:
+        manager = MagicMock()
+        manager.capture.side_effect = RuntimeError("boom")
 
         stop_token = StopToken()
         failed: list[tuple[int, str]] = []
 
-        worker = ExecutorWorker(4, _fake_connected(), stop_token)
+        ctx = _make_runtime_context()
+        ctx.screenshot_manager = manager
+
+        worker = ExecutorWorker(4, ctx, stop_token)
         worker.failed.connect(lambda eid, msg: failed.append((eid, msg)))
         worker.run()
 

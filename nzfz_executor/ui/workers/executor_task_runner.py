@@ -6,7 +6,7 @@ import logging
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from nzfz_executor.core.models import ConnectedWindow
+from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.ui.workers.executor_workers import ExecutorWorker
 from nzfz_executor.ui.workers.stop_token import StopToken
 
@@ -32,7 +32,7 @@ class ExecutorTaskRunner(QObject):
     def start(
         self,
         execution_id: int,
-        context: ConnectedWindow | None,
+        runtime_context: ExecutorRuntimeContext | None,
     ) -> bool:
         if self.is_running():
             message = "当前已有任务正在运行"
@@ -46,7 +46,7 @@ class ExecutorTaskRunner(QObject):
         self._thread = QThread(self)
         self._worker = ExecutorWorker(
             execution_id=execution_id,
-            context=context,
+            runtime_context=runtime_context,
             stop_token=self._stop_token,
         )
 

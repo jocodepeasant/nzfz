@@ -1,12 +1,18 @@
-"""P2-05 ExecutorTaskRunner 单元测试。"""
+"""P2-07 ExecutorTaskRunner 单元测试。"""
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import MagicMock
 
 import pytest
+from PIL import Image
 
-from nzfz_executor.core.models import ConnectedWindow, WindowRect
+from nzfz_executor.core.actions.mouse_controller import MouseController
+from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
+from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
+from nzfz_executor.core.models import ConnectedWindow, ScreenshotResult, WindowRect
+from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
 from nzfz_executor.ui.workers.executor_task_runner import ExecutorTaskRunner
 
 
@@ -31,6 +37,32 @@ def _fake_connected() -> ConnectedWindow:
     )
 
 
+def _make_runtime_context(*, block: threading.Event | None = None) -> ExecutorRuntimeContext:
+    manager = MagicMock()
+
+    def capture(*args, **kwargs):
+        if block is not None:
+            block.wait(timeout=30)
+        return ScreenshotResult(
+            success=True,
+            image=Image.new("RGB", (100, 100)),
+            width=100,
+            height=100,
+        )
+
+    manager.capture.side_effect = capture
+
+    return ExecutorRuntimeContext(
+        connected_context=_fake_connected(),
+        screenshot_manager=manager,
+        recognizer=CenterPointRecognizer(),
+        coordinate_mapper=CoordinateMapper(),
+        mouse_controller=MouseController(dry_run=True),
+        max_iterations=1,
+        loop_interval_ms=0,
+    )
+
+
 def _process_events_until(qapp, timeout_ms: int = 5000) -> None:
     from PySide6.QtCore import QElapsedTimer, QEventLoop
 
@@ -50,31 +82,27 @@ class TestExecutorTaskRunner:
         completed: list[int] = []
         runner.completed.connect(completed.append)
 
-        assert runner.start(1, _fake_connected()) is True
+        assert runner.start(1, _make_runtime_context()) is True
         _process_events_until(qapp)
 
         assert completed == [1]
         assert runner.is_running() is False
         assert runner._thread is None
 
-    def test_start_rejected_when_already_running(self, qapp, monkeypatch) -> None:
-        monkeypatch.setattr(
-            "nzfz_executor.ui.workers.executor_workers.EXECUTOR_PLACEHOLDER_TOTAL_STEPS",
-            1000,
-        )
-        monkeypatch.setattr("nzfz_executor.ui.workers.executor_workers.time.sleep", lambda _: None)
-
+    def test_start_rejected_when_already_running(self, qapp) -> None:
+        block = threading.Event()
         runner = ExecutorTaskRunner()
         rejected: list[tuple[int, str]] = []
         runner.start_rejected.connect(
             lambda eid, msg: rejected.append((eid, msg)),
         )
 
-        assert runner.start(1, _fake_connected()) is True
-        assert runner.start(2, _fake_connected()) is False
+        assert runner.start(1, _make_runtime_context(block=block)) is True
+        assert runner.start(2, _make_runtime_context()) is False
         assert rejected[0][0] == 2
         assert "已有任务" in rejected[0][1]
 
+        block.set()
         runner.request_stop()
         _process_events_until(qapp)
 
@@ -85,7 +113,7 @@ class TestExecutorTaskRunner:
         stopped: list[int] = []
         runner.stopped.connect(stopped.append)
 
-        assert runner.start(3, _fake_connected()) is True
+        assert runner.start(3, _make_runtime_context()) is True
         assert runner.request_stop() is True
         _process_events_until(qapp)
 
@@ -107,7 +135,7 @@ class TestExecutorTaskRunner:
         terminate = MagicMock()
         monkeypatch.setattr(original_thread, "terminate", terminate)
 
-        assert runner.start(4, _fake_connected()) is True
+        assert runner.start(4, _make_runtime_context()) is True
         _process_events_until(qapp)
 
         terminate.assert_not_called()

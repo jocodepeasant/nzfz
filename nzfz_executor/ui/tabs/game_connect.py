@@ -16,7 +16,11 @@ from PySide6.QtWidgets import (
 
 from PIL import Image
 
+from nzfz_executor.core.actions.mouse_controller import MouseController
+from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
+from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.screenshot_manager import ScreenshotManager
+from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
 from nzfz_executor.core.window_manager import WindowManager
 from nzfz_executor.core.models import (
     WindowInfo,
@@ -30,7 +34,10 @@ from nzfz_executor.core.models import (
     ScreenshotResult,
 )
 from nzfz_executor.ui.config.defaults import (
+    DEFAULT_ACTION_DRY_RUN,
     DEFAULT_EXECUTOR_LOG_TIME_FORMAT,
+    DEFAULT_EXECUTOR_LOOP_INTERVAL_MS,
+    DEFAULT_EXECUTOR_MAX_ITERATIONS,
     DEFAULT_EXECUTOR_PROGRESS_LOG_ENABLED,
     DEFAULT_EXECUTOR_STOP_TIMEOUT_MS,
     DEFAULT_MAX_EXECUTOR_LOG_LINES,
@@ -595,9 +602,21 @@ class GameConnectTab(QWidget):
 
         self._set_executor_state(ExecutorRunState.RUNNING)
 
+        runtime_context = ExecutorRuntimeContext(
+            connected_context=context,
+            screenshot_manager=self._screenshot_manager,
+            recognizer=CenterPointRecognizer(),
+            coordinate_mapper=CoordinateMapper(),
+            mouse_controller=MouseController(
+                dry_run=DEFAULT_ACTION_DRY_RUN,
+            ),
+            max_iterations=DEFAULT_EXECUTOR_MAX_ITERATIONS,
+            loop_interval_ms=DEFAULT_EXECUTOR_LOOP_INTERVAL_MS,
+        )
+
         started = self._executor_task_runner.start(
             execution_id=execution_id,
-            context=context,
+            runtime_context=runtime_context,
         )
         if not started:
             self._append_executor_log(

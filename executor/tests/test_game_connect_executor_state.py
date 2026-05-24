@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.models import ConnectedWindow, WindowInfo, WindowRect
 from nzfz_executor.ui.feedback import FeedbackCode, get_feedback_text
 from nzfz_executor.ui.states import ExecutorRunState
@@ -81,13 +82,17 @@ class FakeExecutorTaskRunner:
         self.progress = self._emitter.progress
         self.start_rejected = self._emitter.start_rejected
 
-        self.start_calls: list[tuple[int, ConnectedWindow | None]] = []
+        self.start_calls: list[tuple[int, ExecutorRuntimeContext | None]] = []
         self.stop_calls = 0
         self._running = False
         self.next_start_result = True
 
-    def start(self, execution_id: int, context: ConnectedWindow | None) -> bool:
-        self.start_calls.append((execution_id, context))
+    def start(
+        self,
+        execution_id: int,
+        runtime_context: ExecutorRuntimeContext | None,
+    ) -> bool:
+        self.start_calls.append((execution_id, runtime_context))
         if not self.next_start_result:
             self.start_rejected.emit(execution_id, "当前已有任务正在运行")
             return False
@@ -403,6 +408,32 @@ class TestScreenshotRestrictions:
         tab._is_capturing = False
         tab._refresh_executor_ready_state()
         assert tab._executor_state == ExecutorRunState.READY
+
+
+class TestRuntimeContextInjection:
+    def test_start_creates_runtime_context(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+
+        assert len(runner.start_calls) == 1
+        runtime_context = runner.start_calls[0][1]
+        assert isinstance(runtime_context, ExecutorRuntimeContext)
+
+    def test_runtime_context_contains_components(self, tab: GameConnectTab) -> None:
+        from nzfz_executor.core.actions.mouse_controller import MouseController
+        from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
+        from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
+
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+
+        runtime_context = runner.start_calls[0][1]
+        assert runtime_context is not None
+        assert runtime_context.screenshot_manager is tab._screenshot_manager
+        assert isinstance(runtime_context.recognizer, CenterPointRecognizer)
+        assert isinstance(runtime_context.coordinate_mapper, CoordinateMapper)
+        assert isinstance(runtime_context.mouse_controller, MouseController)
+        assert runtime_context.mouse_controller.dry_run is True
 
 
 class TestConnectionStateEffects:
