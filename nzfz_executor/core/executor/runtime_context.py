@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from nzfz_executor.core.actions.keyboard_controller import KeyboardController
 from nzfz_executor.core.actions.mouse_controller import MouseController
 from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
 from nzfz_executor.core.models import ConnectedWindow
@@ -20,5 +21,6 @@ class ExecutorRuntimeContext:
     recognizer: ImageRecognizer
     coordinate_mapper: CoordinateMapper
     mouse_controller: MouseController
+    keyboard_controller: KeyboardController
     max_iterations: int
     loop_interval_ms: int

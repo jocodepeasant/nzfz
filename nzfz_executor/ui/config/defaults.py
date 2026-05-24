@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from nzfz_executor.core.scripts.constants import (
+    DEFAULT_MAP_RESET_SEQUENCE,
+    DEFAULT_WAIT_AFTER_SELECT_TRAP_MS,
+)
+
 DEFAULT_MAX_EXECUTOR_LOG_LINES = 1000
 
 DEFAULT_SCREENSHOT_TIMEOUT_MS = 5_000

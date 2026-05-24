@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from nzfz_executor.core.actions.keyboard_controller import KeyboardController
 from nzfz_executor.core.actions.mouse_controller import MouseController
 from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
 from nzfz_executor.core.executor.options import ExecutorLaunchOptions
@@ -48,6 +49,7 @@ def _make_runtime_context(**kwargs) -> ExecutorRuntimeContext:
         recognizer=CenterPointRecognizer(),
         coordinate_mapper=CoordinateMapper(),
         mouse_controller=MouseController.create_default(dry_run=True),
+        keyboard_controller=KeyboardController.create_default(dry_run=True),
         max_iterations=kwargs.get("max_iterations", 1),
         loop_interval_ms=kwargs.get("loop_interval_ms", 0),
     )

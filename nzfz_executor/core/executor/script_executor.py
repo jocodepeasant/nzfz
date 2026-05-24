@@ -7,16 +7,23 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from nzfz_executor.core.actions.models import ClickAction, MouseButton
+from nzfz_executor.core.actions.models import (
+    ClickAction,
+    KeyPressAction,
+    MouseButton,
+    MouseDragAction,
+)
 from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.executor.script_execution_state import ScriptExecutionState
 from nzfz_executor.core.scripts.constants import (
+    DEFAULT_MAP_RESET_SEQUENCE,
     DEFAULT_RETRY_INTERVAL_MS,
     REGION_ENTER_ACTION_TYPES,
     SCRIPT_EXECUTION_MODE_SEQUENTIAL,
     SCRIPT_EXECUTION_MODE_SINGLE_WAVE,
     UNSUPPORTED_ENABLED_ACTION_TYPES_BASIC,
+    DEFAULT_WAIT_AFTER_SELECT_TRAP_MS,
 )
 from nzfz_executor.core.scripts.models import (
     RatioPoint,
@@ -79,8 +86,7 @@ class ScriptExecutor:
         )
         self._log("[Script] Basic Profile: manual_wave_driver enabled")
         self._log(
-            "[Script] 注意：P2-10 不执行 OCR、conditions、verify、"
-            "真实键盘、真实拖拽",
+            "[Script] 注意：Basic Profile 不执行 OCR、conditions、verify",
         )
         self._log(f"[Script] execution_mode={options.script_execution_mode}")
 
@@ -279,9 +285,13 @@ class ScriptExecutor:
         if not ensure_result.success:
             return ensure_result
 
-        key_result = self._dry_run_key_press(trap, action)
+        key_result = self._press_select_key(trap, action)
         if not key_result.success:
             return key_result
+
+        wait_result = self._wait_ms(DEFAULT_WAIT_AFTER_SELECT_TRAP_MS)
+        if wait_result.stopped:
+            return wait_result
 
         click_result = self._click_slot(slot, action)
         if not click_result.success:
@@ -327,14 +337,11 @@ class ScriptExecutor:
                 continue
 
             if action_type == "reset_view_to_origin":
-                origin = self._script.map.initial_view.origin_region_id
-                self._state.current_region_id = origin
-                self._log(
-                    f"dry-run: reset_view_to_origin -> "
-                    f"current_region_id={origin}",
-                )
+                result = self._run_reset_sequence()
+                if not result.success:
+                    return result
             elif action_type == "drag_ratio":
-                result = self._dry_run_drag_ratio(enter_action)
+                result = self._execute_drag_ratio(enter_action)
                 if not result.success:
                     return result
             elif action_type == "wait":
@@ -352,29 +359,119 @@ class ScriptExecutor:
         self._log(f"[Region] current_region_id={region_id}")
         return ActionExecutionResult(success=True)
 
-    def _dry_run_drag_ratio(self, enter_action: dict[str, Any]) -> ActionExecutionResult:
+    def _execute_drag_ratio(
+        self,
+        enter_action: dict[str, Any],
+    ) -> ActionExecutionResult:
         viewport = self._context.connected_context.window_rect
         mapper = self._context.coordinate_mapper
         from_point = self._parse_ratio_dict(enter_action.get("from"))
         to_point = self._parse_ratio_dict(enter_action.get("to"))
         from_screen = mapper.ratio_to_screen_point(viewport, from_point)
         to_screen = mapper.ratio_to_screen_point(viewport, to_point)
-        duration_ms = int(enter_action.get("duration_ms", 0))
+        duration_ms = int(enter_action.get("duration_ms", 300))
+        repeat = max(1, int(enter_action.get("repeat", 1)))
+
+        drag_action = MouseDragAction(
+            start=from_screen,
+            end=to_screen,
+            duration_ms=duration_ms,
+            button=MouseButton.LEFT,
+        )
+        for index in range(repeat):
+            if self._check_stop():
+                return ActionExecutionResult(success=False, stopped=True)
+
+            result = self._context.mouse_controller.drag(
+                drag_action,
+                context=self._context.connected_context,
+                log=self._log,
+            )
+            if not result.success:
+                return ActionExecutionResult(
+                    success=False,
+                    message=result.message,
+                )
+            if result.message:
+                self._log(result.message)
+            if repeat > 1:
+                self._log(
+                    f"[Region] drag_ratio repeat {index + 1}/{repeat}",
+                )
+
+        return ActionExecutionResult(success=True)
+
+    def _run_reset_sequence(self) -> ActionExecutionResult:
+        self._log("[Region] reset_view_to_origin sequence start")
+        for step in DEFAULT_MAP_RESET_SEQUENCE:
+            if self._check_stop():
+                return ActionExecutionResult(success=False, stopped=True)
+
+            step_type = str(step.get("type", ""))
+            if step_type == "press_key":
+                key = str(step.get("key", ""))
+                press_result = self._context.keyboard_controller.press(
+                    KeyPressAction(key=key),
+                    context=self._context.connected_context,
+                    log=self._log,
+                )
+                if not press_result.success:
+                    return ActionExecutionResult(
+                        success=False,
+                        message=press_result.message,
+                    )
+                if press_result.message:
+                    self._log(press_result.message)
+
+                wait_ms = int(step.get("wait_ms", 0))
+                if wait_ms > 0:
+                    self._log(f"[Wait] {wait_ms}ms")
+                    wait_result = self._wait_ms(wait_ms)
+                    if not wait_result.success:
+                        return wait_result
+            elif step_type == "wait":
+                duration_ms = int(step.get("duration_ms", 0))
+                self._log(f"[Wait] {duration_ms}ms")
+                wait_result = self._wait_ms(duration_ms)
+                if not wait_result.success:
+                    return wait_result
+            else:
+                self._log(
+                    f"[Region] reset sequence 跳过未知步骤类型：{step_type}",
+                )
+
+        origin = self._script.map.initial_view.origin_region_id
+        self._state.current_region_id = origin
         self._log(
-            f"drag_ratio dry-run from=({from_screen.x},{from_screen.y}) "
-            f"to=({to_screen.x},{to_screen.y}), duration={duration_ms}ms",
+            f"[Region] reset_view_to_origin completed -> "
+            f"current_region_id={origin}",
+        )
+        self._log(
+            "[Region][Warning] P2-11 暂无 map_ui_detection，"
+            "无法确认地图视野是否真的回到 origin",
         )
         return ActionExecutionResult(success=True)
 
-    def _dry_run_key_press(
+    def _press_select_key(
         self,
         trap: TrapDefinition,
         action: ScriptAction,
     ) -> ActionExecutionResult:
         self._log(
-            f"[PlaceTrap] trap={trap.trap_id} select_key={trap.select_key} "
-            f"dry-run key press",
+            f"[PlaceTrap] trap={trap.trap_id} select_key={trap.select_key}",
         )
+        press_result = self._context.keyboard_controller.press(
+            KeyPressAction(key=trap.select_key),
+            context=self._context.connected_context,
+            log=self._log,
+        )
+        if not press_result.success:
+            return ActionExecutionResult(
+                success=False,
+                message=press_result.message,
+            )
+        if press_result.message:
+            self._log(press_result.message)
         return ActionExecutionResult(success=True)
 
     def _click_slot(
@@ -397,6 +494,7 @@ class ScriptExecutor:
         result = self._context.mouse_controller.click(
             click_action,
             context=self._context.connected_context,
+            log=self._log,
         )
         if not result.success:
             return ActionExecutionResult(success=False, message=result.message)

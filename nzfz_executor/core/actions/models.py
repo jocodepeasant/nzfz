@@ -32,6 +32,24 @@ class ClickAction:
 
 
 @dataclass(frozen=True)
+class KeyPressAction:
+    """按键动作描述。"""
+
+    key: str
+    hold_ms: int = 0
+
+
+@dataclass(frozen=True)
+class MouseDragAction:
+    """鼠标拖拽动作描述。"""
+
+    start: ScreenPoint
+    end: ScreenPoint
+    duration_ms: int = 300
+    button: MouseButton = MouseButton.LEFT
+
+
+@dataclass(frozen=True)
 class ActionResult:
     """动作执行结果。"""
 

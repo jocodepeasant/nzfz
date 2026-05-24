@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from nzfz_executor.core.actions.models import ActionResult, ClickAction
+from nzfz_executor.core.actions.models import ActionResult, ClickAction, MouseDragAction
 from nzfz_executor.core.models import ConnectedWindow
 
 
@@ -14,6 +14,13 @@ class MouseInputBackend(Protocol):
     def click(
         self,
         action: ClickAction,
+        context: ConnectedWindow | None = None,
+    ) -> ActionResult:
+        ...
+
+    def drag(
+        self,
+        action: MouseDragAction,
         context: ConnectedWindow | None = None,
     ) -> ActionResult:
         ...

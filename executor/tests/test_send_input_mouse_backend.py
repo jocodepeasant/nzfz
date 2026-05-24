@@ -15,7 +15,7 @@ from nzfz_executor.core.actions.backends.send_input_backend import (
     MOUSEEVENTF_RIGHTUP,
     SendInputMouseBackend,
 )
-from nzfz_executor.core.actions.models import ClickAction, MouseButton, ScreenPoint
+from nzfz_executor.core.actions.models import ClickAction, MouseButton, MouseDragAction, ScreenPoint
 from nzfz_executor.core.models import ConnectedWindow, WindowRect
 
 
@@ -171,3 +171,51 @@ class TestSendInputMouseBackendDuration:
         backend.click(_click(duration_ms=-10), context=_connected())
 
         assert sleeps == []
+
+
+class TestSendInputMouseBackendDrag:
+    def test_drag_outside_window_fails(self) -> None:
+        backend = SendInputMouseBackend()
+        result = backend.drag(
+            MouseDragAction(
+                start=ScreenPoint(x=50, y=50),
+                end=ScreenPoint(x=150, y=50),
+            ),
+            context=_connected(),
+        )
+
+        assert result.success is False
+        assert "超出连接窗口范围" in result.message
+
+    def test_drag_releases_button_on_failure(self, mock_user32) -> None:
+        mock_user32.SetCursorPos.side_effect = [1, 0]
+        backend = SendInputMouseBackend()
+        result = backend.drag(
+            MouseDragAction(
+                start=ScreenPoint(x=150, y=250),
+                end=ScreenPoint(x=200, y=250),
+            ),
+            context=_connected(),
+        )
+
+        assert result.success is False
+        assert mock_user32.SendInput.call_count >= 1
+
+    def test_drag_success_moves_cursor(self, mock_user32, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "nzfz_executor.core.actions.backends.send_input_backend.time.sleep",
+            lambda _: None,
+        )
+        backend = SendInputMouseBackend()
+        result = backend.drag(
+            MouseDragAction(
+                start=ScreenPoint(x=150, y=250),
+                end=ScreenPoint(x=200, y=250),
+                duration_ms=80,
+            ),
+            context=_connected(),
+        )
+
+        assert result.success is True
+        assert mock_user32.SetCursorPos.call_count >= 5
+        assert mock_user32.SendInput.call_count >= 2

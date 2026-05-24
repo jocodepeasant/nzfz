@@ -10,6 +10,7 @@ from nzfz_executor.core.actions.models import (
     ActionResult,
     ClickAction,
     MouseButton,
+    MouseDragAction,
 )
 from nzfz_executor.core.actions.safety import ActionSafetyGuard
 from nzfz_executor.core.models import ConnectedWindow
@@ -124,6 +125,73 @@ class SendInputMouseBackend:
                 success=False,
                 message=f"真实点击异常：{exc}",
             )
+
+    def drag(
+        self,
+        action: MouseDragAction,
+        context: ConnectedWindow | None = None,
+    ) -> ActionResult:
+        validation = self._safety_guard.validate_drag(
+            start=action.start,
+            end=action.end,
+            context=context,
+        )
+        if not validation.valid:
+            return ActionResult(
+                success=False,
+                message=validation.message,
+            )
+
+        start = action.start
+        end = action.end
+        duration_ms = max(0, action.duration_ms)
+        steps = max(5, duration_ms // 16) if duration_ms > 0 else 5
+        step_delay = duration_ms / steps / 1000 if duration_ms > 0 else 0
+
+        down_flag, up_flag = self._get_button_flags(action.button)
+        button_down = False
+
+        try:
+            if not ctypes.windll.user32.SetCursorPos(int(start.x), int(start.y)):
+                return ActionResult(
+                    success=False,
+                    message="真实拖拽失败：SetCursorPos(start) 调用失败",
+                )
+
+            self._send_mouse_flag(down_flag)
+            button_down = True
+
+            for step in range(1, steps + 1):
+                t = step / steps
+                x = int(start.x + (end.x - start.x) * t)
+                y = int(start.y + (end.y - start.y) * t)
+                if not ctypes.windll.user32.SetCursorPos(x, y):
+                    return ActionResult(
+                        success=False,
+                        message=f"真实拖拽失败：SetCursorPos 步骤 {step}/{steps} 失败",
+                    )
+                if step_delay > 0:
+                    time.sleep(step_delay)
+
+            return ActionResult(
+                success=True,
+                message=(
+                    "[Mouse] drag "
+                    f"from=({start.x},{start.y}) to=({end.x},{end.y}), "
+                    f"duration={duration_ms}ms"
+                ),
+            )
+        except Exception as exc:
+            return ActionResult(
+                success=False,
+                message=f"真实拖拽异常：{exc}",
+            )
+        finally:
+            if button_down:
+                try:
+                    self._send_mouse_flag(up_flag)
+                except Exception:
+                    pass
 
     def _get_button_flags(
         self,

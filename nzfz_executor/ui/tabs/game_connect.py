@@ -13,11 +13,12 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QPlainTextEdit, QProgressBar,
-    QComboBox, QSpinBox, QFileDialog,
+    QComboBox, QSpinBox, QFileDialog, QCheckBox,
 )
 
 from PIL import Image
 
+from nzfz_executor.core.actions.keyboard_controller import KeyboardController
 from nzfz_executor.core.actions.mouse_controller import MouseController
 from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
 from nzfz_executor.core.executor.options import ExecutorLaunchOptions
@@ -164,6 +165,7 @@ class GameConnectTab(QWidget):
         self._executor_log_entries: list[ExecutorLogEntry] = []
         self._max_executor_log_lines = DEFAULT_MAX_EXECUTOR_LOG_LINES
         self._selected_script_path: str | None = None
+        self._action_dry_run = DEFAULT_ACTION_DRY_RUN
 
         self._search_running = False
         self._connecting = False
@@ -212,6 +214,7 @@ class GameConnectTab(QWidget):
         self._select_script_button: QPushButton
         self._script_execution_mode_combo: QComboBox
         self._script_single_wave_spin: QSpinBox
+        self._action_dry_run_checkbox: QCheckBox
         self._executor_status_label: QLabel
         self._executor_progress_bar: QProgressBar
         self._executor_step_label: QLabel
@@ -421,7 +424,7 @@ class GameConnectTab(QWidget):
 
     def _resolve_executor_ready_feedback(self) -> FeedbackCode:
         if (
-            DEFAULT_ACTION_DRY_RUN
+            self._action_dry_run
             and self._connection_state == ConnectionUiState.CONNECTED_NOT_READY
         ):
             return FeedbackCode.EXECUTOR_READY_BACKGROUND
@@ -516,7 +519,7 @@ class GameConnectTab(QWidget):
         }:
             return True
         if state == ConnectionUiState.CONNECTED_NOT_READY:
-            return not DEFAULT_ACTION_DRY_RUN
+            return not self._action_dry_run
         return False
 
     def _on_connection_state_changed_for_executor(
@@ -626,6 +629,11 @@ class GameConnectTab(QWidget):
             mode == SCRIPT_EXECUTION_MODE_SINGLE_WAVE,
         )
 
+    def _on_action_dry_run_toggled(self, checked: bool) -> None:
+        self._action_dry_run = checked
+        if self._executor_state == ExecutorRunState.READY:
+            self._show_executor_feedback_by_state(ExecutorRunState.READY)
+
     def _on_select_script_clicked(self) -> None:
         default_dir = _REPO_ROOT / "resources" / "scripts"
         if not default_dir.is_dir():
@@ -679,7 +687,7 @@ class GameConnectTab(QWidget):
             return
 
         if (
-            not DEFAULT_ACTION_DRY_RUN
+            not self._action_dry_run
             and self._connection_state == ConnectionUiState.CONNECTED_NOT_READY
         ):
             activated, _error = self._window_manager.activate_connected_window()
@@ -688,6 +696,20 @@ class GameConnectTab(QWidget):
             if not activated or not health_result.is_ready:
                 self._refresh_executor_ready_state()
                 self._show_executor_feedback(FeedbackCode.EXECUTOR_ACTIVATE_FAILED)
+                return
+
+        if not self._action_dry_run:
+            confirmed = QMessageBox.question(
+                self,
+                "确认真实输入",
+                (
+                    "当前将启用真实键盘、鼠标点击和鼠标拖拽。\n"
+                    "请确认目标游戏窗口在前台且处于可接受输入的状态。"
+                ),
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if confirmed != QMessageBox.StandardButton.Ok:
                 return
 
         execution_id = self._next_execution_id()
@@ -701,6 +723,13 @@ class GameConnectTab(QWidget):
             "准备启动执行任务",
             execution_id=execution_id,
         )
+        if not self._action_dry_run:
+            self._append_executor_log(
+                ExecutorLogLevel.WARNING,
+                "[Safety][Warning] 当前 dry-run=false，"
+                "将执行真实键盘/鼠标输入。",
+                execution_id=execution_id,
+            )
 
         self._set_executor_state(ExecutorRunState.RUNNING)
 
@@ -727,7 +756,10 @@ class GameConnectTab(QWidget):
             recognizer=recognizer,
             coordinate_mapper=CoordinateMapper(),
             mouse_controller=MouseController.create_default(
-                dry_run=DEFAULT_ACTION_DRY_RUN,
+                dry_run=self._action_dry_run,
+            ),
+            keyboard_controller=KeyboardController.create_default(
+                dry_run=self._action_dry_run,
             ),
             max_iterations=DEFAULT_EXECUTOR_MAX_ITERATIONS,
             loop_interval_ms=DEFAULT_EXECUTOR_LOOP_INTERVAL_MS,
@@ -1299,6 +1331,16 @@ class GameConnectTab(QWidget):
         mode_row.addWidget(self._script_single_wave_spin)
         mode_row.addStretch()
         section.addLayout(mode_row)
+
+        safety_row = QHBoxLayout()
+        safety_row.setSpacing(8)
+        safety_row.addWidget(QLabel("执行安全："))
+        self._action_dry_run_checkbox = QCheckBox("Dry-run 模式")
+        self._action_dry_run_checkbox.setChecked(DEFAULT_ACTION_DRY_RUN)
+        self._action_dry_run_checkbox.toggled.connect(self._on_action_dry_run_toggled)
+        safety_row.addWidget(self._action_dry_run_checkbox)
+        safety_row.addStretch()
+        section.addLayout(safety_row)
 
         row = QHBoxLayout()
         row.setSpacing(8)

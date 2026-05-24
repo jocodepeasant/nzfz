@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from nzfz_executor.core.actions.models import ActionResult, ClickAction
+from nzfz_executor.core.actions.models import (
+    ActionResult,
+    ClickAction,
+    MouseDragAction,
+)
 from nzfz_executor.core.models import ConnectedWindow
 
 
@@ -21,6 +25,23 @@ class DryRunMouseBackend:
             message=(
                 "dry-run：跳过真实点击 "
                 f"screen=({point.x},{point.y}), "
+                f"button={action.button.value}"
+            ),
+        )
+
+    def drag(
+        self,
+        action: MouseDragAction,
+        context: ConnectedWindow | None = None,
+    ) -> ActionResult:
+        start = action.start
+        end = action.end
+        return ActionResult(
+            success=True,
+            message=(
+                "[Mouse] dry-run drag "
+                f"from=({start.x},{start.y}) to=({end.x},{end.y}), "
+                f"duration={action.duration_ms}ms, "
                 f"button={action.button.value}"
             ),
         )

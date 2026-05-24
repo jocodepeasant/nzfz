@@ -6,6 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from PySide6.QtWidgets import QMessageBox
+
 from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.models import (
@@ -224,6 +226,18 @@ def _prepare_ready_tab(tab: GameConnectTab) -> FakeExecutorTaskRunner:
     return runner
 
 
+def _set_real_input_mode(tab: GameConnectTab) -> None:
+    tab._action_dry_run = False
+    tab._action_dry_run_checkbox.setChecked(False)
+
+
+def _auto_confirm_real_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "nzfz_executor.ui.tabs.game_connect.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+
+
 class TestExecutorInitialState:
     def test_initial_not_ready(self, tab: GameConnectTab) -> None:
         assert tab._executor_state == ExecutorRunState.NOT_READY
@@ -254,12 +268,8 @@ class TestExecutorReadyState:
     def test_connected_not_ready_stays_not_ready_when_real_click(
         self,
         tab: GameConnectTab,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setattr(
-            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
-            False,
-        )
+        _set_real_input_mode(tab)
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
         assert tab._executor_state == ExecutorRunState.READY
         assert tab._start_executor_button.isEnabled() is True
@@ -489,6 +499,63 @@ class TestRuntimeContextInjection:
             runtime_context.mouse_controller._backend,
             DryRunMouseBackend,
         )
+        from nzfz_executor.core.actions.backends.dry_run_keyboard_backend import (
+            DryRunKeyboardBackend,
+        )
+        from nzfz_executor.core.actions.keyboard_controller import KeyboardController
+
+        assert isinstance(runtime_context.keyboard_controller, KeyboardController)
+        assert isinstance(
+            runtime_context.keyboard_controller._backend,
+            DryRunKeyboardBackend,
+        )
+
+
+class TestActionDryRunUi:
+    def test_dry_run_checkbox_default_checked(self, tab: GameConnectTab) -> None:
+        assert tab._action_dry_run_checkbox.isChecked() is True
+        assert tab._action_dry_run is True
+
+    def test_cancel_real_input_confirmation_does_not_start(
+        self,
+        tab: GameConnectTab,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_real_input_mode(tab)
+        monkeypatch.setattr(
+            "nzfz_executor.ui.tabs.game_connect.QMessageBox.question",
+            lambda *args, **kwargs: QMessageBox.StandardButton.Cancel,
+        )
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+
+        assert len(runner.start_calls) == 0
+        assert tab._executor_state == ExecutorRunState.READY
+
+    def test_real_input_launch_uses_send_input_backends(
+        self,
+        tab: GameConnectTab,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from nzfz_executor.core.actions.backends.send_input_backend import (
+            SendInputMouseBackend,
+        )
+        from nzfz_executor.core.actions.backends.send_input_keyboard_backend import (
+            SendInputKeyboardBackend,
+        )
+
+        _set_real_input_mode(tab)
+        _auto_confirm_real_input(monkeypatch)
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+
+        runtime_context = runner.start_calls[0][1]
+        assert runtime_context is not None
+        assert isinstance(runtime_context.mouse_controller._backend, SendInputMouseBackend)
+        assert isinstance(
+            runtime_context.keyboard_controller._backend,
+            SendInputKeyboardBackend,
+        )
 
 
 class TestConnectionStateEffects:
@@ -497,10 +564,8 @@ class TestConnectionStateEffects:
         tab: GameConnectTab,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setattr(
-            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
-            False,
-        )
+        _set_real_input_mode(tab)
+        _auto_confirm_real_input(monkeypatch)
         runner = _prepare_ready_tab(tab)
         tab._on_start_executor_clicked()
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
@@ -523,10 +588,8 @@ class TestConnectionStateEffects:
         tab: GameConnectTab,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setattr(
-            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
-            False,
-        )
+        _set_real_input_mode(tab)
+        _auto_confirm_real_input(monkeypatch)
         connected = _fake_connected()
         tab._window_manager.get_connected_context.return_value = connected
         tab._window_manager.activate_connected_window.return_value = (True, "")
@@ -551,12 +614,8 @@ class TestConnectionStateEffects:
     def test_start_activate_failed_when_real_click(
         self,
         tab: GameConnectTab,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setattr(
-            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
-            False,
-        )
+        _set_real_input_mode(tab)
         connected = _fake_connected()
         tab._window_manager.get_connected_context.return_value = connected
         tab._window_manager.activate_connected_window.return_value = (False, "激活失败")

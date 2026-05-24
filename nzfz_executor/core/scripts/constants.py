@@ -49,3 +49,7 @@ SUPPORTED_SCRIPT_EXECUTION_MODES = frozenset(
 )
 
 DEFAULT_RETRY_INTERVAL_MS = 800
+DEFAULT_WAIT_AFTER_SELECT_TRAP_MS = 150
+DEFAULT_MAP_RESET_SEQUENCE: list[dict[str, object]] = [
+    {"type": "press_key", "key": "o", "wait_ms": 500},
+]
