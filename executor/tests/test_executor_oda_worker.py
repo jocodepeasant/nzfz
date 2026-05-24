@@ -96,7 +96,7 @@ class TestExecutorOdaWorker:
 
         assert completed == [2]
         assert any("截图成功" in msg for msg in logs)
-        assert any("识别到目标" in msg for msg in logs)
+        assert any("选中候选目标" in msg for msg in logs)
         assert any("dry-run" in msg for msg in logs)
 
     def test_max_iterations_three(self, qapp, monkeypatch) -> None:

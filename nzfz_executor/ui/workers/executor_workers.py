@@ -114,9 +114,10 @@ class ExecutorWorker(QObject):
 
         recognition = ctx.recognizer.recognize(image)
 
+        if recognition.message:
+            self._emit_log(recognition.message)
+
         if not recognition.found or not recognition.candidates:
-            message = recognition.message or "未识别到目标，本轮跳过动作"
-            self._emit_log(message)
             self._emit_progress(
                 self._iteration_percent(iteration, total, 80),
                 "未识别到目标，跳过动作",
@@ -126,7 +127,7 @@ class ExecutorWorker(QObject):
         candidate = recognition.candidates[0]
 
         self._emit_log(
-            "识别到目标："
+            "选中候选目标："
             f"{candidate.name}, "
             f"image=({candidate.point.x},{candidate.point.y}), "
             f"confidence={candidate.confidence:.2f}",

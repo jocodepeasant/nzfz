@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QCloseEvent, QImage, QPixmap
@@ -20,7 +21,7 @@ from nzfz_executor.core.actions.mouse_controller import MouseController
 from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.screenshot_manager import ScreenshotManager
-from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
+from nzfz_executor.core.vision.recognizer_factory import create_recognizer
 from nzfz_executor.core.window_manager import WindowManager
 from nzfz_executor.core.models import (
     WindowInfo,
@@ -41,7 +42,12 @@ from nzfz_executor.ui.config.defaults import (
     DEFAULT_EXECUTOR_PROGRESS_LOG_ENABLED,
     DEFAULT_EXECUTOR_STOP_TIMEOUT_MS,
     DEFAULT_MAX_EXECUTOR_LOG_LINES,
+    DEFAULT_RECOGNIZER_TYPE,
     DEFAULT_SCREENSHOT_TIMEOUT_MS,
+    DEFAULT_TEMPLATE_DIR,
+    DEFAULT_TEMPLATE_EXTENSIONS,
+    DEFAULT_TEMPLATE_MATCH_GRAYSCALE,
+    DEFAULT_TEMPLATE_MATCH_THRESHOLD,
 )
 from nzfz_executor.ui.feedback import (
     FeedbackCode,
@@ -54,6 +60,8 @@ from nzfz_executor.ui.states import ExecutorRunState
 from nzfz_executor.ui.workers import ExecutorTaskRunner, ScreenshotTaskRunner, WindowTaskRunner
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _FEEDBACK_STYLE_COLORS = {
     FeedbackLevel.INFO: "#666666",
@@ -602,10 +610,18 @@ class GameConnectTab(QWidget):
 
         self._set_executor_state(ExecutorRunState.RUNNING)
 
+        recognizer = create_recognizer(
+            recognizer_type=DEFAULT_RECOGNIZER_TYPE,
+            template_dir=_REPO_ROOT / DEFAULT_TEMPLATE_DIR,
+            threshold=DEFAULT_TEMPLATE_MATCH_THRESHOLD,
+            grayscale=DEFAULT_TEMPLATE_MATCH_GRAYSCALE,
+            extensions=DEFAULT_TEMPLATE_EXTENSIONS,
+        )
+
         runtime_context = ExecutorRuntimeContext(
             connected_context=context,
             screenshot_manager=self._screenshot_manager,
-            recognizer=CenterPointRecognizer(),
+            recognizer=recognizer,
             coordinate_mapper=CoordinateMapper(),
             mouse_controller=MouseController.create_default(
                 dry_run=DEFAULT_ACTION_DRY_RUN,

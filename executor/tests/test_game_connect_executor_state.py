@@ -423,7 +423,7 @@ class TestRuntimeContextInjection:
         from nzfz_executor.core.actions.backends import DryRunMouseBackend
         from nzfz_executor.core.actions.mouse_controller import MouseController
         from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
-        from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
+        from nzfz_executor.core.vision.template_matcher import TemplateMatcherRecognizer
 
         runner = _prepare_ready_tab(tab)
         tab._on_start_executor_clicked()
@@ -431,7 +431,7 @@ class TestRuntimeContextInjection:
         runtime_context = runner.start_calls[0][1]
         assert runtime_context is not None
         assert runtime_context.screenshot_manager is tab._screenshot_manager
-        assert isinstance(runtime_context.recognizer, CenterPointRecognizer)
+        assert isinstance(runtime_context.recognizer, TemplateMatcherRecognizer)
         assert isinstance(runtime_context.coordinate_mapper, CoordinateMapper)
         assert isinstance(runtime_context.mouse_controller, MouseController)
         assert isinstance(
