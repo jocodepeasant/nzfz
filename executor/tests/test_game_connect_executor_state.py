@@ -6,8 +6,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
-from nzfz_executor.core.models import ConnectedWindow, WindowInfo, WindowRect
+from nzfz_executor.core.models import (
+    ConnectedWindow,
+    HealthCheckResult,
+    HealthStatus,
+    WindowInfo,
+    WindowRect,
+)
 from nzfz_executor.ui.feedback import FeedbackCode, get_feedback_text
 from nzfz_executor.ui.states import ExecutorRunState
 from nzfz_executor.ui.tabs.game_connect import ConnectionUiState, GameConnectTab, SearchUiState
@@ -82,7 +89,9 @@ class FakeExecutorTaskRunner:
         self.progress = self._emitter.progress
         self.start_rejected = self._emitter.start_rejected
 
-        self.start_calls: list[tuple[int, ExecutorRuntimeContext | None]] = []
+        self.start_calls: list[
+            tuple[int, ExecutorRuntimeContext | None, ExecutorLaunchOptions | None]
+        ] = []
         self.stop_calls = 0
         self._running = False
         self.next_start_result = True
@@ -91,8 +100,10 @@ class FakeExecutorTaskRunner:
         self,
         execution_id: int,
         runtime_context: ExecutorRuntimeContext | None,
+        launch_options: ExecutorLaunchOptions | None = None,
+        repo_root=None,
     ) -> bool:
-        self.start_calls.append((execution_id, runtime_context))
+        self.start_calls.append((execution_id, runtime_context, launch_options))
         if not self.next_start_result:
             self.start_rejected.emit(execution_id, "当前已有任务正在运行")
             return False
@@ -229,9 +240,32 @@ class TestExecutorReadyState:
         assert tab._executor_state == ExecutorRunState.READY
         assert tab._start_executor_button.isEnabled() is True
 
-    def test_connected_not_ready_stays_not_ready(self, tab: GameConnectTab) -> None:
+    def test_connected_not_ready_becomes_ready_when_dry_run(
+        self,
+        tab: GameConnectTab,
+    ) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
-        assert tab._executor_state == ExecutorRunState.NOT_READY
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._start_executor_button.isEnabled() is True
+        assert tab._executor_status_label.text() == get_feedback_text(
+            FeedbackCode.EXECUTOR_READY_BACKGROUND,
+        )
+
+    def test_connected_not_ready_stays_not_ready_when_real_click(
+        self,
+        tab: GameConnectTab,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
+            False,
+        )
+        tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._start_executor_button.isEnabled() is True
+        assert tab._executor_status_label.text() == get_feedback_text(
+            FeedbackCode.EXECUTOR_READY,
+        )
 
     def test_disconnected_not_ready(self, tab: GameConnectTab) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_READY)
@@ -247,6 +281,17 @@ class TestStartStopFlow:
         assert len(runner.start_calls) == 1
         assert tab._start_executor_button.isEnabled() is False
         assert tab._stop_executor_button.isEnabled() is True
+
+    def test_start_from_not_ready_when_dry_run(self, tab: GameConnectTab) -> None:
+        connected = _fake_connected()
+        tab._window_manager.get_connected_context.return_value = connected
+        tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
+        runner = tab._executor_task_runner
+        assert isinstance(runner, FakeExecutorTaskRunner)
+
+        tab._on_start_executor_clicked()
+        assert tab._executor_state == ExecutorRunState.RUNNING
+        assert len(runner.start_calls) == 1
 
     def test_start_blocked_when_not_ready(self, tab: GameConnectTab) -> None:
         tab._on_start_executor_clicked()
@@ -417,6 +462,9 @@ class TestRuntimeContextInjection:
 
         assert len(runner.start_calls) == 1
         runtime_context = runner.start_calls[0][1]
+        launch_options = runner.start_calls[0][2]
+        assert launch_options is not None
+        assert launch_options.script_path
         assert isinstance(runtime_context, ExecutorRuntimeContext)
 
     def test_runtime_context_contains_components(self, tab: GameConnectTab) -> None:
@@ -429,6 +477,9 @@ class TestRuntimeContextInjection:
         tab._on_start_executor_clicked()
 
         runtime_context = runner.start_calls[0][1]
+        launch_options = runner.start_calls[0][2]
+        assert launch_options is not None
+        assert launch_options.script_path
         assert runtime_context is not None
         assert runtime_context.screenshot_manager is tab._screenshot_manager
         assert isinstance(runtime_context.recognizer, TemplateMatcherRecognizer)
@@ -441,10 +492,93 @@ class TestRuntimeContextInjection:
 
 
 class TestConnectionStateEffects:
-    def test_running_connection_degraded_to_failed(self, tab: GameConnectTab) -> None:
+    def test_running_connection_degraded_to_failed_when_real_click(
+        self,
+        tab: GameConnectTab,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
+            False,
+        )
         runner = _prepare_ready_tab(tab)
         tab._on_start_executor_clicked()
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
+        assert tab._executor_state == ExecutorRunState.FAILED
+        assert "连接状态异常" in tab._executor_status_label.text()
+        assert runner.stop_calls == 1
+
+    def test_running_connection_not_ready_continues_when_dry_run(
+        self,
+        tab: GameConnectTab,
+    ) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
+        assert tab._executor_state == ExecutorRunState.RUNNING
+        assert runner.stop_calls == 0
+
+    def test_start_with_activate_when_real_click_and_not_ready(
+        self,
+        tab: GameConnectTab,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
+            False,
+        )
+        connected = _fake_connected()
+        tab._window_manager.get_connected_context.return_value = connected
+        tab._window_manager.activate_connected_window.return_value = (True, "")
+        tab._window_manager.check_health.return_value = HealthCheckResult(
+            status=HealthStatus.HEALTHY,
+            message="窗口连接正常",
+            window=connected,
+            is_foreground=True,
+        )
+        tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
+        tab._set_executor_state(ExecutorRunState.READY)
+
+        runner = tab._executor_task_runner
+        assert isinstance(runner, FakeExecutorTaskRunner)
+        tab._on_start_executor_clicked()
+
+        tab._window_manager.activate_connected_window.assert_called_once()
+        assert tab._connection_state == ConnectionUiState.CONNECTED_READY
+        assert tab._executor_state == ExecutorRunState.RUNNING
+        assert len(runner.start_calls) == 1
+
+    def test_start_activate_failed_when_real_click(
+        self,
+        tab: GameConnectTab,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "nzfz_executor.ui.tabs.game_connect.DEFAULT_ACTION_DRY_RUN",
+            False,
+        )
+        connected = _fake_connected()
+        tab._window_manager.get_connected_context.return_value = connected
+        tab._window_manager.activate_connected_window.return_value = (False, "激活失败")
+        tab._window_manager.check_health.return_value = HealthCheckResult(
+            status=HealthStatus.HEALTHY,
+            message="窗口连接正常，但当前不在前台",
+            window=connected,
+            is_foreground=False,
+        )
+        tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
+
+        tab._on_start_executor_clicked()
+
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._executor_status_label.text() == get_feedback_text(
+            FeedbackCode.EXECUTOR_ACTIVATE_FAILED,
+        )
+
+    def test_running_connection_degraded_to_failed(self, tab: GameConnectTab) -> None:
+        runner = _prepare_ready_tab(tab)
+        tab._on_start_executor_clicked()
+        tab._set_connection_state(ConnectionUiState.CONNECTED_UNHEALTHY)
         assert tab._executor_state == ExecutorRunState.FAILED
         assert "连接状态异常" in tab._executor_status_label.text()
         assert runner.stop_calls == 1

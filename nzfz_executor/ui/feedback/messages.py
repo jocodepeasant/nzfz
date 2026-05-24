@@ -57,6 +57,8 @@ class FeedbackCode(Enum):
 
     EXECUTOR_NOT_READY = "executor.not_ready"
     EXECUTOR_READY = "executor.ready"
+    EXECUTOR_READY_BACKGROUND = "executor.ready_background"
+    EXECUTOR_ACTIVATE_FAILED = "executor.activate_failed"
     EXECUTOR_RUNNING = "executor.running"
     EXECUTOR_STOPPING = "executor.stopping"
     EXECUTOR_STOPPED = "executor.stopped"
@@ -134,7 +136,7 @@ FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
     ),
     FeedbackCode.HEALTH_NOT_READY_FOREGROUND: FeedbackMessage(
         FeedbackLevel.WARNING,
-        "窗口未在前台，请切回游戏窗口",
+        "窗口未在前台；dry-run 可执行，真实操作需切回游戏",
     ),
     FeedbackCode.HEALTH_UNHEALTHY: FeedbackMessage(
         FeedbackLevel.ERROR,
@@ -219,6 +221,14 @@ FEEDBACK_MESSAGES: dict[FeedbackCode, FeedbackMessage] = {
     FeedbackCode.EXECUTOR_READY: FeedbackMessage(
         FeedbackLevel.SUCCESS,
         "执行就绪，可开始任务",
+    ),
+    FeedbackCode.EXECUTOR_READY_BACKGROUND: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "可开始 dry-run 调试（窗口未在前台）",
+    ),
+    FeedbackCode.EXECUTOR_ACTIVATE_FAILED: FeedbackMessage(
+        FeedbackLevel.WARNING,
+        "无法激活游戏窗口，请手动切回游戏后重试",
     ),
     FeedbackCode.EXECUTOR_RUNNING: FeedbackMessage(
         FeedbackLevel.INFO,

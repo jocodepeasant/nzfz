@@ -13,12 +13,14 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QPlainTextEdit, QProgressBar,
+    QComboBox, QSpinBox, QFileDialog,
 )
 
 from PIL import Image
 
 from nzfz_executor.core.actions.mouse_controller import MouseController
 from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
+from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.core.screenshot_manager import ScreenshotManager
 from nzfz_executor.core.vision.recognizer_factory import create_recognizer
@@ -44,10 +46,16 @@ from nzfz_executor.ui.config.defaults import (
     DEFAULT_MAX_EXECUTOR_LOG_LINES,
     DEFAULT_RECOGNIZER_TYPE,
     DEFAULT_SCREENSHOT_TIMEOUT_MS,
+    DEFAULT_SCRIPT_EXECUTION_MODE,
+    DEFAULT_SCRIPT_PATH,
+    DEFAULT_SCRIPT_SINGLE_WAVE,
     DEFAULT_TEMPLATE_DIR,
     DEFAULT_TEMPLATE_EXTENSIONS,
     DEFAULT_TEMPLATE_MATCH_GRAYSCALE,
     DEFAULT_TEMPLATE_MATCH_THRESHOLD,
+    SCRIPT_EXECUTION_MODE_SEQUENTIAL,
+    SCRIPT_EXECUTION_MODE_SINGLE_WAVE,
+    SUPPORTED_SCRIPT_EXECUTION_MODES,
 )
 from nzfz_executor.ui.feedback import (
     FeedbackCode,
@@ -155,6 +163,7 @@ class GameConnectTab(QWidget):
 
         self._executor_log_entries: list[ExecutorLogEntry] = []
         self._max_executor_log_lines = DEFAULT_MAX_EXECUTOR_LOG_LINES
+        self._selected_script_path: str | None = None
 
         self._search_running = False
         self._connecting = False
@@ -199,6 +208,10 @@ class GameConnectTab(QWidget):
         self._disconnect_btn: QPushButton
         self._start_executor_button: QPushButton
         self._stop_executor_button: QPushButton
+        self._script_path_input: QLineEdit
+        self._select_script_button: QPushButton
+        self._script_execution_mode_combo: QComboBox
+        self._script_single_wave_spin: QSpinBox
         self._executor_status_label: QLabel
         self._executor_progress_bar: QProgressBar
         self._executor_step_label: QLabel
@@ -406,10 +419,21 @@ class GameConnectTab(QWidget):
         self._executor_status_label.setText(text)
         self._apply_feedback_style(self._executor_status_label, level)
 
+    def _resolve_executor_ready_feedback(self) -> FeedbackCode:
+        if (
+            DEFAULT_ACTION_DRY_RUN
+            and self._connection_state == ConnectionUiState.CONNECTED_NOT_READY
+        ):
+            return FeedbackCode.EXECUTOR_READY_BACKGROUND
+        return FeedbackCode.EXECUTOR_READY
+
     def _show_executor_feedback_by_state(self, state: ExecutorRunState) -> None:
+        if state == ExecutorRunState.READY:
+            self._show_executor_feedback(self._resolve_executor_ready_feedback())
+            return
+
         mapping = {
             ExecutorRunState.NOT_READY: FeedbackCode.EXECUTOR_NOT_READY,
-            ExecutorRunState.READY: FeedbackCode.EXECUTOR_READY,
             ExecutorRunState.RUNNING: FeedbackCode.EXECUTOR_RUNNING,
             ExecutorRunState.STOPPING: FeedbackCode.EXECUTOR_STOPPING,
             ExecutorRunState.STOPPED: FeedbackCode.EXECUTOR_STOPPED,
@@ -425,8 +449,12 @@ class GameConnectTab(QWidget):
         }
 
     def _is_executor_ready(self) -> bool:
+        allowed_states = {
+            ConnectionUiState.CONNECTED_READY,
+            ConnectionUiState.CONNECTED_NOT_READY,
+        }
         return (
-            self._connection_state == ConnectionUiState.CONNECTED_READY
+            self._connection_state in allowed_states
             and not self._is_capturing
             and not self._is_executor_busy()
         )
@@ -481,12 +509,22 @@ class GameConnectTab(QWidget):
             return False
         return True
 
+    def _should_abort_running_executor(self, state: ConnectionUiState) -> bool:
+        if state in {
+            ConnectionUiState.DISCONNECTED,
+            ConnectionUiState.CONNECTED_UNHEALTHY,
+        }:
+            return True
+        if state == ConnectionUiState.CONNECTED_NOT_READY:
+            return not DEFAULT_ACTION_DRY_RUN
+        return False
+
     def _on_connection_state_changed_for_executor(
         self,
         state: ConnectionUiState,
     ) -> None:
         if self._executor_state == ExecutorRunState.RUNNING:
-            if state != ConnectionUiState.CONNECTED_READY:
+            if self._should_abort_running_executor(state):
                 self._executor_task_runner.request_stop()
                 self._set_executor_state(
                     ExecutorRunState.FAILED,
@@ -497,6 +535,8 @@ class GameConnectTab(QWidget):
                 self._clear_screenshot_preview()
                 self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_UNAVAILABLE)
                 return
+            if state == ConnectionUiState.CONNECTED_NOT_READY:
+                logger.debug("dry-run 执行中，窗口失焦，继续运行")
         if not self._is_executor_busy():
             self._refresh_executor_ready_state()
 
@@ -580,6 +620,48 @@ class GameConnectTab(QWidget):
         self._executor_progress_bar.setValue(0)
         self._set_executor_step("-")
 
+    def _on_script_execution_mode_changed(self) -> None:
+        mode = self._script_execution_mode_combo.currentData()
+        self._script_single_wave_spin.setEnabled(
+            mode == SCRIPT_EXECUTION_MODE_SINGLE_WAVE,
+        )
+
+    def _on_select_script_clicked(self) -> None:
+        default_dir = _REPO_ROOT / "resources" / "scripts"
+        if not default_dir.is_dir():
+            default_dir = _REPO_ROOT
+
+        selected, _filter = QFileDialog.getOpenFileName(
+            self,
+            "选择塔防脚本 JSON",
+            str(default_dir),
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not selected:
+            return
+
+        self._selected_script_path = selected
+        self._script_path_input.setText(selected)
+        self._append_executor_log(
+            ExecutorLogLevel.INFO,
+            f"已选择脚本：{selected}",
+        )
+
+    def _resolve_script_path_for_launch(self) -> str:
+        if self._selected_script_path:
+            return self._selected_script_path
+        return DEFAULT_SCRIPT_PATH
+
+    def _build_launch_options(self) -> ExecutorLaunchOptions:
+        mode = self._script_execution_mode_combo.currentData()
+        if mode not in SUPPORTED_SCRIPT_EXECUTION_MODES:
+            mode = DEFAULT_SCRIPT_EXECUTION_MODE
+        return ExecutorLaunchOptions(
+            script_path=self._resolve_script_path_for_launch(),
+            script_execution_mode=str(mode),
+            script_single_wave=self._script_single_wave_spin.value(),
+        )
+
     def _on_start_executor_clicked(self) -> None:
         if self._executor_state != ExecutorRunState.READY:
             self._show_executor_feedback(FeedbackCode.EXECUTOR_START_BLOCKED)
@@ -596,6 +678,18 @@ class GameConnectTab(QWidget):
             self._refresh_executor_ready_state()
             return
 
+        if (
+            not DEFAULT_ACTION_DRY_RUN
+            and self._connection_state == ConnectionUiState.CONNECTED_NOT_READY
+        ):
+            activated, _error = self._window_manager.activate_connected_window()
+            health_result = self._window_manager.check_health()
+            self._apply_health_result(health_result)
+            if not activated or not health_result.is_ready:
+                self._refresh_executor_ready_state()
+                self._show_executor_feedback(FeedbackCode.EXECUTOR_ACTIVATE_FAILED)
+                return
+
         execution_id = self._next_execution_id()
         self._active_execution_id = execution_id
         self._execution_generations[execution_id] = self._connection_generation
@@ -609,6 +703,15 @@ class GameConnectTab(QWidget):
         )
 
         self._set_executor_state(ExecutorRunState.RUNNING)
+
+        launch_options = self._build_launch_options()
+        script_path = launch_options.script_path
+        if self._selected_script_path is None:
+            self._append_executor_log(
+                ExecutorLogLevel.INFO,
+                f"未选择脚本，尝试使用默认脚本：{script_path}",
+                execution_id=execution_id,
+            )
 
         recognizer = create_recognizer(
             recognizer_type=DEFAULT_RECOGNIZER_TYPE,
@@ -633,6 +736,8 @@ class GameConnectTab(QWidget):
         started = self._executor_task_runner.start(
             execution_id=execution_id,
             runtime_context=runtime_context,
+            launch_options=launch_options,
+            repo_root=_REPO_ROOT,
         )
         if not started:
             self._append_executor_log(
@@ -1156,6 +1261,44 @@ class GameConnectTab(QWidget):
     def _create_executor_area(self) -> QVBoxLayout:
         section = QVBoxLayout()
         section.setSpacing(6)
+
+        script_row = QHBoxLayout()
+        script_row.setSpacing(8)
+        script_row.addWidget(QLabel("脚本文件："))
+        self._script_path_input = QLineEdit()
+        self._script_path_input.setReadOnly(True)
+        self._script_path_input.setPlaceholderText(DEFAULT_SCRIPT_PATH)
+        script_row.addWidget(self._script_path_input)
+        self._select_script_button = QPushButton("选择...")
+        self._select_script_button.clicked.connect(self._on_select_script_clicked)
+        script_row.addWidget(self._select_script_button)
+        section.addLayout(script_row)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        mode_row.addWidget(QLabel("执行模式："))
+        self._script_execution_mode_combo = QComboBox()
+        self._script_execution_mode_combo.addItem(
+            "顺序执行全部波次（Manual）",
+            SCRIPT_EXECUTION_MODE_SEQUENTIAL,
+        )
+        self._script_execution_mode_combo.addItem(
+            "手动执行指定波次",
+            SCRIPT_EXECUTION_MODE_SINGLE_WAVE,
+        )
+        self._script_execution_mode_combo.currentIndexChanged.connect(
+            self._on_script_execution_mode_changed,
+        )
+        mode_row.addWidget(self._script_execution_mode_combo)
+        mode_row.addWidget(QLabel("指定波次："))
+        self._script_single_wave_spin = QSpinBox()
+        self._script_single_wave_spin.setMinimum(1)
+        self._script_single_wave_spin.setMaximum(999)
+        self._script_single_wave_spin.setValue(DEFAULT_SCRIPT_SINGLE_WAVE)
+        self._script_single_wave_spin.setEnabled(False)
+        mode_row.addWidget(self._script_single_wave_spin)
+        mode_row.addStretch()
+        section.addLayout(mode_row)
 
         row = QHBoxLayout()
         row.setSpacing(8)

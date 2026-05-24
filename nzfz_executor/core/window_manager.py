@@ -387,6 +387,13 @@ class WindowManager:
         """获取当前已连接窗口上下文（与 get_connected_window 同义）。"""
         return self._connected_window
 
+    def activate_connected_window(self) -> tuple[bool, str]:
+        """尝试将当前已连接窗口置前；未连接时返回失败。"""
+        connected = self._connected_window
+        if connected is None:
+            return False, "未连接游戏窗口"
+        return self._activate_window(connected.hwnd)
+
     def get_last_error(self) -> str | None:
         """获取最近一次错误信息。"""
         return self.last_error

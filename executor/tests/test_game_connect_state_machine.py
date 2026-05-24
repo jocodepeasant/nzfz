@@ -289,11 +289,14 @@ class TestButtonStates:
         assert tab._executor_state == ExecutorRunState.READY
         assert tab._start_executor_button.isEnabled() is True
 
-    def test_connected_not_ready_execute_disabled(self, tab: GameConnectTab) -> None:
+    def test_connected_not_ready_execute_enabled_when_dry_run(
+        self,
+        tab: GameConnectTab,
+    ) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_NOT_READY)
         assert tab._disconnect_btn.isEnabled() is True
-        assert tab._executor_state == ExecutorRunState.NOT_READY
-        assert tab._start_executor_button.isEnabled() is False
+        assert tab._executor_state == ExecutorRunState.READY
+        assert tab._start_executor_button.isEnabled() is True
 
     def test_connected_unhealthy_execute_disabled(self, tab: GameConnectTab) -> None:
         tab._set_connection_state(ConnectionUiState.CONNECTED_UNHEALTHY)

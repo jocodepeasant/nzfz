@@ -1,19 +1,23 @@
-"""P2-07 ExecutorTaskRunner 单元测试。"""
+"""P2-10 ExecutorTaskRunner 单元测试。"""
 
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from PIL import Image
 
 from nzfz_executor.core.actions.mouse_controller import MouseController
 from nzfz_executor.core.executor.coordinate_mapper import CoordinateMapper
+from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
-from nzfz_executor.core.models import ConnectedWindow, ScreenshotResult, WindowRect
+from nzfz_executor.core.models import ConnectedWindow, WindowRect
 from nzfz_executor.core.vision.recognizers import CenterPointRecognizer
+from nzfz_executor.ui.config.defaults import DEFAULT_SCRIPT_PATH
 from nzfz_executor.ui.workers.executor_task_runner import ExecutorTaskRunner
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="session")
@@ -38,29 +42,19 @@ def _fake_connected() -> ConnectedWindow:
 
 
 def _make_runtime_context(*, block: threading.Event | None = None) -> ExecutorRuntimeContext:
-    manager = MagicMock()
-
-    def capture(*args, **kwargs):
-        if block is not None:
-            block.wait(timeout=30)
-        return ScreenshotResult(
-            success=True,
-            image=Image.new("RGB", (100, 100)),
-            width=100,
-            height=100,
-        )
-
-    manager.capture.side_effect = capture
-
     return ExecutorRuntimeContext(
         connected_context=_fake_connected(),
-        screenshot_manager=manager,
+        screenshot_manager=MagicMock(),
         recognizer=CenterPointRecognizer(),
         coordinate_mapper=CoordinateMapper(),
         mouse_controller=MouseController.create_default(dry_run=True),
         max_iterations=1,
         loop_interval_ms=0,
     )
+
+
+def _launch_options() -> ExecutorLaunchOptions:
+    return ExecutorLaunchOptions(script_path=DEFAULT_SCRIPT_PATH)
 
 
 def _process_events_until(qapp, timeout_ms: int = 5000) -> None:
@@ -70,26 +64,31 @@ def _process_events_until(qapp, timeout_ms: int = 5000) -> None:
     timer.start()
     while timer.elapsed() < timeout_ms:
         qapp.processEvents(QEventLoop.ProcessEventsFlag.AllEvents, 50)
-        if not qapp.thread().isRunning():
-            break
 
 
 class TestExecutorTaskRunner:
     def test_start_forwards_completed(self, qapp, monkeypatch) -> None:
-        monkeypatch.setattr("nzfz_executor.ui.workers.executor_workers.time.sleep", lambda _: None)
+        monkeypatch.setattr("nzfz_executor.core.executor.script_executor.time.sleep", lambda _: None)
 
         runner = ExecutorTaskRunner()
         completed: list[int] = []
         runner.completed.connect(completed.append)
 
-        assert runner.start(1, _make_runtime_context()) is True
+        assert runner.start(
+            1,
+            _make_runtime_context(),
+            _launch_options(),
+            REPO_ROOT,
+        ) is True
         _process_events_until(qapp)
 
         assert completed == [1]
         assert runner.is_running() is False
         assert runner._thread is None
 
-    def test_start_rejected_when_already_running(self, qapp) -> None:
+    def test_start_rejected_when_already_running(self, qapp, monkeypatch) -> None:
+        monkeypatch.setattr("nzfz_executor.core.executor.script_executor.time.sleep", lambda _: None)
+
         block = threading.Event()
         runner = ExecutorTaskRunner()
         rejected: list[tuple[int, str]] = []
@@ -97,8 +96,29 @@ class TestExecutorTaskRunner:
             lambda eid, msg: rejected.append((eid, msg)),
         )
 
-        assert runner.start(1, _make_runtime_context(block=block)) is True
-        assert runner.start(2, _make_runtime_context()) is False
+        def slow_execute(*args, **kwargs):
+            block.wait(timeout=30)
+            from nzfz_executor.core.executor.script_executor import ScriptExecutionResult
+
+            return ScriptExecutionResult(success=True)
+
+        monkeypatch.setattr(
+            "nzfz_executor.ui.workers.executor_workers.ScriptExecutor.execute",
+            slow_execute,
+        )
+
+        assert runner.start(
+            1,
+            _make_runtime_context(),
+            _launch_options(),
+            REPO_ROOT,
+        ) is True
+        assert runner.start(
+            2,
+            _make_runtime_context(),
+            _launch_options(),
+            REPO_ROOT,
+        ) is False
         assert rejected[0][0] == 2
         assert "已有任务" in rejected[0][1]
 
@@ -107,13 +127,18 @@ class TestExecutorTaskRunner:
         _process_events_until(qapp)
 
     def test_request_stop_emits_stopped(self, qapp, monkeypatch) -> None:
-        monkeypatch.setattr("nzfz_executor.ui.workers.executor_workers.time.sleep", lambda _: None)
+        monkeypatch.setattr("nzfz_executor.core.executor.script_executor.time.sleep", lambda _: None)
 
         runner = ExecutorTaskRunner()
         stopped: list[int] = []
         runner.stopped.connect(stopped.append)
 
-        assert runner.start(3, _make_runtime_context()) is True
+        assert runner.start(
+            3,
+            _make_runtime_context(),
+            _launch_options(),
+            REPO_ROOT,
+        ) is True
         assert runner.request_stop() is True
         _process_events_until(qapp)
 
@@ -124,7 +149,7 @@ class TestExecutorTaskRunner:
         assert runner.request_stop() is False
 
     def test_does_not_call_thread_terminate(self, qapp, monkeypatch) -> None:
-        monkeypatch.setattr("nzfz_executor.ui.workers.executor_workers.time.sleep", lambda _: None)
+        monkeypatch.setattr("nzfz_executor.core.executor.script_executor.time.sleep", lambda _: None)
 
         runner = ExecutorTaskRunner()
         original_thread = __import__(
@@ -135,7 +160,12 @@ class TestExecutorTaskRunner:
         terminate = MagicMock()
         monkeypatch.setattr(original_thread, "terminate", terminate)
 
-        assert runner.start(4, _make_runtime_context()) is True
+        assert runner.start(
+            4,
+            _make_runtime_context(),
+            _launch_options(),
+            REPO_ROOT,
+        ) is True
         _process_events_until(qapp)
 
         terminate.assert_not_called()

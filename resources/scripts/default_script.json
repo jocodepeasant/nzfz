@@ -1,0 +1,305 @@
+{
+  "schema_version": "1.1.0",
+  "script_id": "default_basic_v1",
+  "script_name": "默认 Basic 示例脚本",
+  "game_mode": "tower_defense",
+  "compatibility": {
+    "executor_min_version": "0.2.0",
+    "profile": "tower_defense_v1_basic",
+    "required_capabilities": [
+      "script_load",
+      "script_validate",
+      "viewport_ratio_coordinate",
+      "manual_wave_driver",
+      "map_open_close",
+      "reset_view_to_origin",
+      "pan_to_region",
+      "place_trap",
+      "wait_action",
+      "log_action",
+      "retry_basic",
+      "condition_basic",
+      "dry_run"
+    ],
+    "optional_capabilities": [
+      "wave_ocr",
+      "template_matching"
+    ]
+  },
+  "package": {
+    "type": "directory",
+    "resource_base": ".",
+    "template_dir": "templates",
+    "preview_dir": "previews",
+    "path_rule": "relative_to_script_json"
+  },
+  "map": {
+    "map_id": "space_station",
+    "map_name": "空间站",
+    "difficulty": "normal",
+    "strategy_id": "baseline",
+    "base_resolution": {
+      "width": 1920,
+      "height": 1080
+    },
+    "coordinate_mode": "viewport_ratio_after_region_enter",
+    "floors": [
+      {
+        "floor_id": "f1",
+        "name": "一层"
+      }
+    ],
+    "default_floor_id": "f1",
+    "initial_view": {
+      "type": "fixed_after_open_map",
+      "origin_region_id": "origin"
+    }
+  },
+  "runtime": {
+    "max_run_minutes": 30,
+    "default_action_timeout_ms": 8000,
+    "default_retry_count": 2,
+    "default_resource_policy": "wait",
+    "default_wait_resource_timeout_ms": 30000,
+    "condition_check_interval_ms": 500,
+    "poll_interval_ms": 500,
+    "wave_stable_frames": 3,
+    "wait_after_pan_ms": 800,
+    "wait_after_place_ms": 600,
+    "wait_after_remove_ms": 600,
+    "wait_after_upgrade_ms": 1000,
+    "reset_view_on_retry": true
+  },
+  "recognition": {
+    "rois": {},
+    "templates": [],
+    "color_rules": [],
+    "multi_frame": {
+      "wave_frames": 5,
+      "resource_frames": 3,
+      "slot_state_frames": 3
+    }
+  },
+  "traps": [
+    {
+      "trap_id": "slow_trap",
+      "trap_name": "减速陷阱",
+      "select_key": "1",
+      "upgrade_key": "1",
+      "upgrade_hold_ms": 4000,
+      "cost": 500,
+      "upgrade_cost": 1000,
+      "max_level": 3,
+      "upgrade_mode": "all_same_type",
+      "recognition": {
+        "placed_templates": [],
+        "icon_template": "",
+        "level_templates": {}
+      }
+    },
+    {
+      "trap_id": "damage_trap",
+      "trap_name": "输出陷阱",
+      "select_key": "2",
+      "upgrade_key": "2",
+      "upgrade_hold_ms": 4000,
+      "cost": 500,
+      "upgrade_cost": 1000,
+      "max_level": 3,
+      "upgrade_mode": "all_same_type",
+      "recognition": {
+        "placed_templates": [],
+        "icon_template": "",
+        "level_templates": {}
+      }
+    }
+  ],
+  "regions": [
+    {
+      "region_id": "origin",
+      "floor_id": "f1",
+      "name": "初始视野",
+      "description": "按 O 打开地图后的默认视野",
+      "enter_policy": {
+        "from": "origin",
+        "reset_before_enter": false
+      },
+      "enter_actions": []
+    },
+    {
+      "region_id": "entrance_left",
+      "floor_id": "f1",
+      "name": "左入口区域",
+      "description": "左侧入口布防区",
+      "enter_policy": {
+        "from": "origin",
+        "reset_before_enter": true
+      },
+      "enter_actions": [
+        {
+          "type": "reset_view_to_origin"
+        },
+        {
+          "type": "drag_ratio",
+          "from": {
+            "x_ratio": 0.65,
+            "y_ratio": 0.5
+          },
+          "to": {
+            "x_ratio": 0.35,
+            "y_ratio": 0.5
+          },
+          "duration_ms": 600,
+          "repeat": 1
+        }
+      ]
+    }
+  ],
+  "slots": [
+    {
+      "slot_id": "A01",
+      "floor_id": "f1",
+      "name": "左入口减速位1",
+      "region_id": "entrance_left",
+      "position": {
+        "x_ratio": 0.452,
+        "y_ratio": 0.561
+      },
+      "precision": {
+        "click_tolerance_px": 6,
+        "allow_micro_adjust": false,
+        "micro_adjust_pattern": "none",
+        "micro_adjust_step_px": 0
+      },
+      "slot_type": "ground",
+      "default_trap": "slow_trap",
+      "verify": {
+        "empty_method": "none",
+        "occupied_method": "none",
+        "level_method": "none"
+      }
+    },
+    {
+      "slot_id": "A02",
+      "floor_id": "f1",
+      "name": "左入口输出位1",
+      "region_id": "entrance_left",
+      "position": {
+        "x_ratio": 0.502,
+        "y_ratio": 0.561
+      },
+      "precision": {
+        "click_tolerance_px": 6,
+        "allow_micro_adjust": false,
+        "micro_adjust_pattern": "none",
+        "micro_adjust_step_px": 0
+      },
+      "slot_type": "ground",
+      "default_trap": "damage_trap",
+      "verify": {
+        "empty_method": "none",
+        "occupied_method": "none",
+        "level_method": "none"
+      }
+    }
+  ],
+  "waves": [
+    {
+      "wave": 1,
+      "name": "第1波初始布防",
+      "execute_once": true,
+      "trigger": {
+        "type": "wave_eq",
+        "value": 1,
+        "stable_frames": 3
+      },
+      "actions": [
+        {
+          "action_id": "w1_place_slow_A01",
+          "type": "place_trap",
+          "enabled": true,
+          "name": "放置左入口减速",
+          "trap_id": "slow_trap",
+          "slot_id": "A01",
+          "retry": {
+            "max_attempts": 2,
+            "interval_ms": 800,
+            "reset_view_before_retry": false,
+            "micro_adjust_on_retry": false
+          },
+          "on_fail": {
+            "policy": "skip"
+          }
+        },
+        {
+          "action_id": "w1_place_damage_A02",
+          "type": "place_trap",
+          "enabled": true,
+          "name": "放置左入口输出",
+          "trap_id": "damage_trap",
+          "slot_id": "A02",
+          "retry": {
+            "max_attempts": 2,
+            "interval_ms": 800
+          },
+          "on_fail": {
+            "policy": "skip"
+          }
+        },
+        {
+          "action_id": "w1_wait_after_place",
+          "type": "wait",
+          "enabled": true,
+          "name": "放置后等待",
+          "duration_ms": 1000
+        },
+        {
+          "action_id": "w1_log_done",
+          "type": "log",
+          "enabled": true,
+          "name": "第1波日志",
+          "level": "info",
+          "message": "第1波初始布防完成"
+        },
+        {
+          "action_id": "w1_upgrade_damage",
+          "type": "upgrade_trap",
+          "enabled": false,
+          "name": "升级输出陷阱"
+        }
+      ]
+    },
+    {
+      "wave": 2,
+      "name": "第2波",
+      "execute_once": true,
+      "trigger": {
+        "type": "wave_eq",
+        "value": 2,
+        "stable_frames": 3
+      },
+      "actions": [
+        {
+          "action_id": "w2_log_start",
+          "type": "log",
+          "enabled": true,
+          "name": "第2波开始",
+          "level": "info",
+          "message": "第2波开始"
+        },
+        {
+          "action_id": "w2_remove_slow",
+          "type": "remove_trap",
+          "enabled": false,
+          "name": "拆除减速"
+        }
+      ]
+    }
+  ],
+  "boss_reserved": {
+    "enabled": false
+  },
+  "metadata": {
+    "description": "P2-10 默认 Basic 示例脚本"
+  }
+}

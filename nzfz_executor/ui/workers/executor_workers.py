@@ -1,18 +1,34 @@
-"""执行器 UI Worker：Observe-Decide-Act 最小闭环（P2-07）。"""
+"""执行器 UI Worker：脚本驱动执行（P2-10）。"""
 
 from __future__ import annotations
 
-import time
+from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal, Slot
 
-from nzfz_executor.core.actions.models import ClickAction
+from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
+from nzfz_executor.core.executor.script_executor import (
+    ScriptExecutor,
+    ScriptExecutorCallbacks,
+)
+from nzfz_executor.core.scripts import ScriptLoader
+from nzfz_executor.ui.config.defaults import DEFAULT_SCRIPT_PATH
 from nzfz_executor.ui.workers.stop_token import StopToken
 
 
+def resolve_script_path(script_path: str, repo_root: Path) -> Path:
+    path = Path(script_path)
+    if path.is_file():
+        return path
+    candidate = repo_root / script_path
+    if candidate.is_file():
+        return candidate
+    return path
+
+
 class ExecutorWorker(QObject):
-    """后台执行 Observe-Decide-Act 任务。"""
+    """后台执行塔防脚本任务。"""
 
     completed = Signal(int)
     stopped = Signal(int)
@@ -24,12 +40,16 @@ class ExecutorWorker(QObject):
         self,
         execution_id: int,
         runtime_context: ExecutorRuntimeContext | None,
+        launch_options: ExecutorLaunchOptions | None,
+        repo_root: Path,
         stop_token: StopToken,
         parent: QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._execution_id = execution_id
         self._runtime_context = runtime_context
+        self._launch_options = launch_options
+        self._repo_root = repo_root
         self._stop_token = stop_token
         self._stop_notified = False
 
@@ -43,157 +63,66 @@ class ExecutorWorker(QObject):
                 )
                 return
 
-            ctx = self._runtime_context
-            max_iterations = max(1, ctx.max_iterations)
-            loop_interval_ms = max(0, ctx.loop_interval_ms)
+            options = self._launch_options or ExecutorLaunchOptions(
+                script_path=DEFAULT_SCRIPT_PATH,
+            )
+            script_path = options.script_path or DEFAULT_SCRIPT_PATH
+            resolved_path = resolve_script_path(script_path, self._repo_root)
 
-            self._emit_log("执行任务已启动")
-            self._emit_progress(0, "执行任务已启动")
+            self._emit_log(f"[Script] 加载脚本：{resolved_path}")
+            self._emit_progress(0, "正在加载脚本...")
 
-            for index in range(max_iterations):
-                if self._check_stop_and_emit():
-                    return
+            load_result = ScriptLoader().load(
+                resolved_path,
+                strict_compatibility=options.strict_compatibility,
+            )
+            for warning in load_result.warnings:
+                self._emit_log(f"[Script] warning: {warning}")
 
-                iteration = index + 1
-                base_percent = int(index / max_iterations * 100)
+            if not load_result.success or load_result.script is None or load_result.indexes is None:
+                errors = load_result.errors or [load_result.message or "脚本加载失败"]
+                message = errors[0]
+                self._emit_log(f"[Script] error: {message}")
+                self.failed.emit(self._execution_id, message)
+                return
 
-                self._emit_log(f"开始第 {iteration} 轮执行")
-                self._emit_progress(base_percent, f"开始第 {iteration} 轮执行")
+            self._emit_log("[Script] compatibility 校验通过")
+            self._emit_progress(5, "脚本加载成功，开始执行")
 
-                self._run_one_iteration(iteration=iteration, total=max_iterations)
+            callbacks = ScriptExecutorCallbacks(
+                log=self._emit_log,
+                progress=self._emit_progress,
+                is_stop_requested=self._stop_token.is_stop_requested,
+            )
+            result = ScriptExecutor().execute(
+                script=load_result.script,
+                indexes=load_result.indexes,
+                context=self._runtime_context,
+                options=options,
+                callbacks=callbacks,
+            )
 
-                if self._check_stop_and_emit():
-                    return
+            if result.stopped:
+                if not self._stop_notified:
+                    self._emit_log("任务收到停止请求")
+                    self.stopped.emit(self._execution_id)
+                    self._stop_notified = True
+                return
 
-                self._emit_log(f"第 {iteration} 轮执行完成")
+            if result.success:
+                self.completed.emit(self._execution_id)
+                return
 
-                if index < max_iterations - 1:
-                    time.sleep(loop_interval_ms / 1000)
-
-            self._emit_progress(100, "任务执行完成")
-            self._emit_log("执行任务已完成")
-            self.completed.emit(self._execution_id)
+            self.failed.emit(
+                self._execution_id,
+                result.message or "脚本执行失败",
+            )
 
         except Exception as exc:
             self.failed.emit(self._execution_id, str(exc))
-
-    def _run_one_iteration(self, iteration: int, total: int) -> None:
-        ctx = self._runtime_context
-        if ctx is None:
-            raise RuntimeError("执行上下文为空")
-
-        self._emit_progress(
-            self._iteration_percent(iteration, total, 10),
-            "正在截图...",
-        )
-        self._emit_log("正在截图...")
-
-        screenshot = ctx.screenshot_manager.capture(ctx.connected_context)
-
-        if screenshot is None or not screenshot.success or screenshot.image is None:
-            message = (
-                screenshot.message
-                if screenshot is not None and screenshot.message
-                else "返回结果为空"
-            )
-            raise RuntimeError(f"截图失败：{message}")
-
-        image = screenshot.image
-        width, height = image.size
-
-        self._emit_log(f"截图成功：{width}x{height}")
-
-        if self._check_stop_and_emit():
-            return
-
-        self._emit_progress(
-            self._iteration_percent(iteration, total, 40),
-            "正在识别目标...",
-        )
-        self._emit_log("正在识别目标...")
-
-        recognition = ctx.recognizer.recognize(image)
-
-        if recognition.message:
-            self._emit_log(recognition.message)
-
-        if not recognition.found or not recognition.candidates:
-            self._emit_progress(
-                self._iteration_percent(iteration, total, 80),
-                "未识别到目标，跳过动作",
-            )
-            return
-
-        candidate = recognition.candidates[0]
-
-        self._emit_log(
-            "选中候选目标："
-            f"{candidate.name}, "
-            f"image=({candidate.point.x},{candidate.point.y}), "
-            f"confidence={candidate.confidence:.2f}",
-        )
-
-        if self._check_stop_and_emit():
-            return
-
-        screen_point = ctx.coordinate_mapper.image_to_screen(
-            ctx.connected_context,
-            candidate.point,
-        )
-
-        self._emit_log(
-            "坐标映射："
-            f"image=({candidate.point.x},{candidate.point.y}) "
-            f"-> screen=({screen_point.x},{screen_point.y})",
-        )
-
-        if self._check_stop_and_emit():
-            return
-
-        self._emit_progress(
-            self._iteration_percent(iteration, total, 70),
-            "正在执行动作...",
-        )
-
-        action = ClickAction(point=screen_point)
-        result = ctx.mouse_controller.click(
-            action,
-            context=ctx.connected_context,
-        )
-
-        if not result.success:
-            raise RuntimeError(result.message or "动作执行失败")
-
-        self._emit_log(result.message or "动作执行成功")
-
-        self._emit_progress(
-            self._iteration_percent(iteration, total, 95),
-            f"第 {iteration} 轮动作完成",
-        )
-
-    def _check_stop_and_emit(self) -> bool:
-        if self._stop_token.is_stop_requested():
-            if not self._stop_notified:
-                self._emit_log("任务收到停止请求")
-                self.stopped.emit(self._execution_id)
-                self._stop_notified = True
-            return True
-        return False
 
     def _emit_log(self, message: str) -> None:
         self.log.emit(self._execution_id, message)
 
     def _emit_progress(self, percent: int, message: str) -> None:
         self.progress.emit(self._execution_id, percent, message)
-
-    def _iteration_percent(
-        self,
-        iteration: int,
-        total: int,
-        inner_percent: int,
-    ) -> int:
-        total = max(1, total)
-        iteration = max(1, iteration)
-        inner_percent = max(0, min(100, inner_percent))
-
-        return int(((iteration - 1) + inner_percent / 100) / total * 100)

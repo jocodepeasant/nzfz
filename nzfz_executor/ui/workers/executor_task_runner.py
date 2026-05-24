@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
 
+from nzfz_executor.core.executor.options import ExecutorLaunchOptions
 from nzfz_executor.core.executor.runtime_context import ExecutorRuntimeContext
 from nzfz_executor.ui.workers.executor_workers import ExecutorWorker
 from nzfz_executor.ui.workers.stop_token import StopToken
@@ -33,6 +35,8 @@ class ExecutorTaskRunner(QObject):
         self,
         execution_id: int,
         runtime_context: ExecutorRuntimeContext | None,
+        launch_options: ExecutorLaunchOptions | None = None,
+        repo_root: Path | None = None,
     ) -> bool:
         if self.is_running():
             message = "当前已有任务正在运行"
@@ -47,6 +51,8 @@ class ExecutorTaskRunner(QObject):
         self._worker = ExecutorWorker(
             execution_id=execution_id,
             runtime_context=runtime_context,
+            launch_options=launch_options,
+            repo_root=repo_root or Path.cwd(),
             stop_token=self._stop_token,
         )
 

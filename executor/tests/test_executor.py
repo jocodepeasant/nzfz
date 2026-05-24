@@ -541,3 +541,25 @@ def test_check_health_consecutive_failures_do_not_disconnect(
     assert second.status == HealthStatus.HANDLE_INVALID
     assert manager.connected_window is connected
     assert manager.is_connected() is True
+
+
+def test_activate_connected_window_not_connected() -> None:
+    manager = WindowManager()
+
+    ok, message = manager.activate_connected_window()
+
+    assert ok is False
+    assert message == "未连接游戏窗口"
+
+
+@patch.object(WindowManager, "_activate_window", return_value=(True, ""))
+def test_activate_connected_window_delegates(mock_activate: MagicMock) -> None:
+    manager = WindowManager()
+    connected = _fake_connected_window()
+    manager._connected_window = connected
+
+    ok, message = manager.activate_connected_window()
+
+    assert ok is True
+    assert message == ""
+    mock_activate.assert_called_once_with(connected.hwnd)
