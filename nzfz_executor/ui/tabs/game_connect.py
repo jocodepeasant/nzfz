@@ -7,13 +7,13 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QEvent, QTimer
 from PySide6.QtGui import QColor, QCloseEvent, QImage, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QMessageBox, QPlainTextEdit, QProgressBar,
-    QComboBox, QSpinBox, QFileDialog, QCheckBox,
+    QComboBox, QSpinBox, QFileDialog, QCheckBox, QScrollArea,
 )
 
 from PIL import Image
@@ -66,6 +66,7 @@ from nzfz_executor.ui.feedback import (
 )
 from nzfz_executor.ui.models.executor_log import ExecutorLogEntry, ExecutorLogLevel
 from nzfz_executor.ui.states import ExecutorRunState
+from nzfz_executor.ui.dialogs.screenshot_viewer import ScreenshotViewerDialog
 from nzfz_executor.ui.workers import ExecutorTaskRunner, ScreenshotTaskRunner, WindowTaskRunner
 
 logger = logging.getLogger(__name__)
@@ -225,9 +226,13 @@ class GameConnectTab(QWidget):
         self._execute_status_label: QLabel
         self._window_info: QLabel
         self._screenshot_preview_label: QLabel
+        self._screenshot_scroll_area: QScrollArea
+        self._screenshot_quality_combo: QComboBox
         self._refresh_screenshot_button: QPushButton
+        self._save_screenshot_button: QPushButton
         self._screenshot_status_label: QLabel
         self._screenshot_meta_label: QLabel
+        self._last_screenshot_image: Image.Image | None = None
 
         self._init_ui()
         self._set_search_state(SearchUiState.IDLE)
@@ -1420,11 +1425,26 @@ class GameConnectTab(QWidget):
         title = QLabel("截图预览")
         section.addWidget(title)
 
+        self._screenshot_scroll_area = QScrollArea()
+        self._screenshot_scroll_area.setWidgetResizable(False)
+        self._screenshot_scroll_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         self._screenshot_preview_label = QLabel("暂无截图")
         self._screenshot_preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._screenshot_preview_label.setProperty("class", "screenshot-placeholder")
         self._screenshot_preview_label.setMinimumHeight(120)
-        section.addWidget(self._screenshot_preview_label)
+        self._screenshot_preview_label.installEventFilter(self)
+        self._screenshot_scroll_area.setWidget(self._screenshot_preview_label)
+
+        section.addWidget(self._screenshot_scroll_area)
+
+        self._screenshot_quality_combo = QComboBox()
+        self._screenshot_quality_combo.addItems(["清晰", "适配"])
+        self._screenshot_quality_combo.setCurrentIndex(0)
+        self._screenshot_quality_combo.currentIndexChanged.connect(
+            self._on_screenshot_quality_changed,
+        )
+        section.addWidget(self._screenshot_quality_combo)
 
         self._refresh_screenshot_button = QPushButton("刷新截图")
         self._refresh_screenshot_button.setEnabled(False)
@@ -1432,6 +1452,13 @@ class GameConnectTab(QWidget):
             self._on_refresh_screenshot_clicked,
         )
         section.addWidget(self._refresh_screenshot_button)
+
+        self._save_screenshot_button = QPushButton("保存截图")
+        self._save_screenshot_button.setEnabled(False)
+        self._save_screenshot_button.clicked.connect(
+            self._on_save_screenshot_clicked,
+        )
+        section.addWidget(self._save_screenshot_button)
 
         self._screenshot_status_label = QLabel()
         section.addWidget(self._screenshot_status_label)
@@ -1950,6 +1977,56 @@ class GameConnectTab(QWidget):
         self._screenshot_preview_label.setText("暂无截图")
         self._screenshot_meta_label.clear()
 
+    def eventFilter(self, obj, event) -> bool:
+        """截图预览标签的鼠标点击事件过滤，单击打开放大查看对话框。"""
+        if obj is self._screenshot_preview_label:
+            if event.type() == QEvent.Type.MouseButtonPress:
+                if self._last_screenshot_image is not None:
+                    self._open_screenshot_viewer()
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _open_screenshot_viewer(self) -> None:
+        """打开截图放大查看对话框。"""
+        context = self._window_manager.get_connected_context()
+        window_title = context.title if context else ""
+        dialog = ScreenshotViewerDialog(
+            parent=self,
+            pil_image=self._last_screenshot_image,
+            window_title=window_title,
+        )
+        dialog.exec()
+
+    def _on_save_screenshot_clicked(self) -> None:
+        """保存当前截图到本地文件。"""
+        if self._last_screenshot_image is None:
+            return
+
+        from PySide6.QtWidgets import QFileDialog
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存截图",
+            "screenshot.png",
+            "PNG 图片 (*.png)",
+        )
+
+        if not file_path:
+            return
+
+        try:
+            self._last_screenshot_image.save(file_path, "PNG")
+            logger.info("Screenshot saved to: %s", file_path)
+            self._screenshot_status_label.setText(f"截图已保存至：{file_path}")
+        except Exception as exc:
+            logger.error("Failed to save screenshot: %s", exc)
+            self._screenshot_status_label.setText(f"保存失败：{exc}")
+
+    def _on_screenshot_quality_changed(self, _index: int) -> None:
+        """清晰度选项切换时重新渲染当前截图（如有）。"""
+        if self._last_screenshot_pixmap is not None:
+            self._set_screenshot_pixmap(self._last_screenshot_pixmap)
+
     def _on_refresh_screenshot_clicked(self) -> None:
         if self._is_capturing:
             return
@@ -2025,6 +2102,7 @@ class GameConnectTab(QWidget):
         self._capture_request_generations.pop(request_id, None)
         self._active_capture_request_id = 0
         self._is_capturing = False
+        self._save_screenshot_button.setEnabled(False)
 
         logger.warning("Screenshot worker failed: %s", message)
         self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_FAILED)
@@ -2039,6 +2117,7 @@ class GameConnectTab(QWidget):
         logger.warning("Screenshot timeout: request_id=%s", request_id)
         self._active_capture_request_id = 0
         self._is_capturing = False
+        self._save_screenshot_button.setEnabled(False)
         self._show_screenshot_feedback(FeedbackCode.SCREENSHOT_TIMEOUT)
         self._update_screenshot_button_state()
         self._refresh_executor_ready_state()
@@ -2070,11 +2149,16 @@ class GameConnectTab(QWidget):
     def _update_screenshot_preview(self, result: ScreenshotResult) -> None:
         if result.image is None:
             return
+        self._last_screenshot_image = result.image
         pixmap = self._pil_image_to_pixmap(result.image)
         self._set_screenshot_pixmap(pixmap)
+        self._save_screenshot_button.setEnabled(True)
 
     def _pil_image_to_pixmap(self, image: Image.Image) -> QPixmap:
-        rgba_image = image.convert("RGBA")
+        if image.mode == "RGBA":
+            rgba_image = image
+        else:
+            rgba_image = image.convert("RGBA")
         data = rgba_image.tobytes("raw", "RGBA")
         qimage = QImage(
             data,
@@ -2082,13 +2166,18 @@ class GameConnectTab(QWidget):
             rgba_image.height,
             QImage.Format.Format_RGBA8888,
         )
-        return QPixmap.fromImage(qimage.copy())
+        return QPixmap.fromImage(qimage)
 
     def _set_screenshot_pixmap(self, pixmap: QPixmap) -> None:
         self._last_screenshot_pixmap = pixmap
-        scaled = pixmap.scaled(
-            self._screenshot_preview_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._screenshot_preview_label.setPixmap(scaled)
+        if self._screenshot_quality_combo.currentIndex() == 0:
+            self._screenshot_preview_label.setPixmap(pixmap)
+            self._screenshot_preview_label.resize(pixmap.size())
+        else:
+            scaled = pixmap.scaled(
+                self._screenshot_scroll_area.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.FastTransformation,
+            )
+            self._screenshot_preview_label.setPixmap(scaled)
+            self._screenshot_preview_label.resize(scaled.size())

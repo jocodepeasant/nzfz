@@ -312,8 +312,12 @@ class WindowsGraphicsCaptureBackend(ScreenshotBackend):
                 window_rect=window_rect or context.window_rect,
                 client_rect=client_rect or context.client_rect,
             )
-            if image.mode != "RGB":
-                image = image.convert("RGB")
+            logger.debug(
+                "WGC captured image mode=%s, size=%dx%d",
+                image.mode,
+                image.width,
+                image.height,
+            )
         except Exception as exc:
             logger.warning(
                 "Windows Graphics Capture failed for hwnd=%s: %s",

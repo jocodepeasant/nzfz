@@ -120,11 +120,14 @@ async def _capture_frame_async(hwnd: int, timeout_sec: float) -> Image.Image:
 
         from PIL import Image
 
-        return Image.frombytes(
+        image = Image.frombytes(
             "RGBA",
             (size.width, size.height),
             pixel_bytes,
         )
+        r, g, b, a = image.split()
+        image = Image.merge("RGBA", (b, g, r, a))
+        return image
     finally:
         try:
             session.close()
